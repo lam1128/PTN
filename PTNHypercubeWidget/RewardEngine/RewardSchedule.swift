@@ -28,6 +28,8 @@ struct EventTrialTitleOverride: Hashable {
 }
 
 enum RewardSchedule {
+    // 暗域锚点：
+    // 2026-07-20 是第 31 期第 1 周的周一，之后严格按 6 周一赛季循环。
     static let darkZoneAnchorSeason = 31
     static let darkZoneAnchorMonday = DayStamp(year: 2026, month: 7, day: 20)
     static let darkZoneCycleWeeks = 6
@@ -50,6 +52,7 @@ enum RewardSchedule {
         ("shop-exchange", "商店兑换", RewardValue(blueTickets: 8, redTickets: 5))
     ]
 
+    // visibleDays = 2 表示只显示当天和次日，第三天自动消失。
     static let timedMonthlySources: [TimedMonthlySource] = [
         TimedMonthlySource(
             id: "emotion-day-8",
@@ -67,6 +70,7 @@ enum RewardSchedule {
         )
     ]
 
+    // 数据间隙只录入已知窗口；未知后续档期不做自动推算。
     static let dataGapWindows: [DataGapWindow] = [
         DataGapWindow(
             id: "season-9-upper",
@@ -77,6 +81,7 @@ enum RewardSchedule {
         )
     ]
 
+    // 这些来源奖励总量已知，但用户要求保留为手动领取，不自动推日期。
     static let manualUnknownSources: [ManualUnknownSourceDefinition] = [
         ManualUnknownSourceDefinition(
             id: "emotion-random",
@@ -90,6 +95,7 @@ enum RewardSchedule {
         )
     ]
 
+    // 活动试用规则：每个活动池 50 晶，额外固定 +10 晶。
     static let eventTrialBaseCrystalsPerBanner = 50
     static let eventTrialBonusCrystals = 10
     static let eventTrialTitleOverrides: [EventTrialTitleOverride] = [

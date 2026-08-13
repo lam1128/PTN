@@ -34,6 +34,8 @@ struct RewardValue: Codable, Hashable {
         self.redTickets = redTickets
     }
 
+    // UI 顶部的“总抽数”按当前约定统计蓝票和红票，
+    // 与下方“今日折合晶数”的显示口径不同，后者统一换算成异方晶。
     var drawEquivalent: Double {
         Double(crystals) / 180.0 + Double(blueTickets + redTickets)
     }
@@ -128,6 +130,7 @@ struct DayStamp: Codable, Hashable, Comparable {
         DayStamp.from(calendar.rewardReferenceDate(for: date), calendar: calendar)
     }
 
+    // 抽卡规划与普通奖励不是同一刷新点，单独保留一个“卡池日”口径。
     static func bannerDay(from date: Date, calendar: Calendar = .rewardCalendar) -> DayStamp {
         DayStamp.from(calendar.bannerReferenceDate(for: date), calendar: calendar)
     }
@@ -360,7 +363,11 @@ extension Calendar {
         return calendar
     }
 
+    // 固定资源按游戏日结算：每天 04:00 刷新。
     var rewardRefreshHour: Int { 4 }
+
+    // 抽卡规划按当前记录口径使用本地 15:00 作为默认切日点。
+    // 个别卡池如果提供了明确时区与时分，会在 PullPlanBanner 内覆盖。
     var bannerRefreshHour: Int { 15 }
 
     func rewardReferenceDate(for date: Date) -> Date {

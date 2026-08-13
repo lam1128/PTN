@@ -1,6 +1,59 @@
 import AppKit
 import SwiftUI
 
+private enum WidgetPalette {
+    static let titlePrimary = Color(red: 0.34, green: 0.15, blue: 0.22)
+    static let titleSecondary = Color(red: 0.44, green: 0.21, blue: 0.30)
+    static let accent = Color(red: 0.46, green: 0.17, blue: 0.29)
+    static let accentSoft = Color(red: 0.50, green: 0.24, blue: 0.35)
+    static let accentMuted = Color(red: 0.52, green: 0.26, blue: 0.36)
+    static let accentLight = Color(red: 0.56, green: 0.35, blue: 0.43)
+    static let claimed = Color(red: 0.58, green: 0.36, blue: 0.43)
+    static let pink = Color(red: 0.87, green: 0.31, blue: 0.55)
+    static let pinkStrong = Color(red: 0.82, green: 0.30, blue: 0.53)
+    static let unchecked = Color(red: 0.65, green: 0.42, blue: 0.51)
+    static let completed = Color(red: 0.34, green: 0.67, blue: 0.61)
+    static let completedText = Color(red: 0.27, green: 0.47, blue: 0.43)
+    static let completedSoft = Color(red: 0.35, green: 0.58, blue: 0.53)
+    static let cardCompletedFill = Color(red: 0.83, green: 0.95, blue: 0.91).opacity(0.34)
+    static let overlayFill = Color.white.opacity(0.82)
+    static let overlayStroke = Color.white.opacity(0.44)
+    static let cardStroke = Color.white.opacity(0.34)
+    static let capsuleStroke = Color.white.opacity(0.30)
+}
+
+private extension View {
+    func widgetRoundedCard(
+        cornerRadius: CGFloat = 16,
+        fill: Color,
+        stroke: Color = WidgetPalette.cardStroke
+    ) -> some View {
+        background(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(fill)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(stroke, lineWidth: 1)
+        }
+    }
+
+    func widgetOverlayPanelCard() -> some View {
+        background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(WidgetPalette.overlayFill)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(WidgetPalette.overlayStroke, lineWidth: 1)
+        }
+    }
+}
+
 struct MainWidgetView: View {
     @ObservedObject var store: AppStateStore
 
@@ -14,13 +67,8 @@ struct MainWidgetView: View {
             ZStack {
                 Color.white.opacity(0.002)
 
-                if store.usesExtraTranslucentBackground {
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                } else {
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                }
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(.ultraThinMaterial)
 
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
                     .fill(
@@ -150,7 +198,7 @@ struct MainWidgetView: View {
                 HStack(alignment: .center, spacing: 8) {
                     Text(DayStamp.rewardDay(from: Date()).key)
                         .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundStyle(Color(red: 0.50, green: 0.24, blue: 0.35))
+                        .foregroundStyle(WidgetPalette.accentSoft)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Color.white.opacity(0.32), in: Capsule())
@@ -162,7 +210,7 @@ struct MainWidgetView: View {
                             .font(.system(size: 14, weight: .semibold))
                             .frame(width: 30, height: 30)
                             .background(Color.white.opacity(0.34), in: Circle())
-                            .foregroundStyle(Color(red: 0.50, green: 0.20, blue: 0.31))
+                            .foregroundStyle(WidgetPalette.accentSoft)
                     }
                     .buttonStyle(.plain)
                 }
@@ -171,15 +219,15 @@ struct MainWidgetView: View {
             HStack(spacing: 10) {
                 Text("蓝票：\(store.totalBlueTickets)")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color(red: 0.50, green: 0.24, blue: 0.35))
+                    .foregroundStyle(WidgetPalette.accentSoft)
 
                 Text("红票：\(store.totalRedTickets)")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color(red: 0.50, green: 0.24, blue: 0.35))
+                    .foregroundStyle(WidgetPalette.accentSoft)
 
                 Text("异方晶：\(store.totalCrystals)")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color(red: 0.50, green: 0.24, blue: 0.35))
+                    .foregroundStyle(WidgetPalette.accentSoft)
             }
         }
     }
@@ -188,11 +236,11 @@ struct MainWidgetView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color(red: 0.44, green: 0.21, blue: 0.30))
+                .foregroundStyle(WidgetPalette.titleSecondary)
 
             Text(value)
                 .font(.system(size: 30, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(red: 0.34, green: 0.15, blue: 0.22))
+                .foregroundStyle(WidgetPalette.titlePrimary)
         }
         .frame(minWidth: 58, alignment: .leading)
     }
@@ -340,12 +388,12 @@ struct MainWidgetView: View {
         Button {
             selectedPrimarySection = section
         } label: {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(
-                    selectedPrimarySection == section
-                        ? Color(red: 0.48, green: 0.17, blue: 0.29)
-                        : Color(red: 0.56, green: 0.35, blue: 0.43)
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(
+                        selectedPrimarySection == section
+                        ? WidgetPalette.accent
+                        : WidgetPalette.accentLight
                 )
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
@@ -359,7 +407,7 @@ struct MainWidgetView: View {
                 )
                 .overlay {
                     Capsule(style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.30), lineWidth: 1)
+                        .strokeBorder(WidgetPalette.capsuleStroke, lineWidth: 1)
                 }
         }
         .buttonStyle(.plain)
@@ -402,18 +450,7 @@ private struct OverlayPanel<Content: View>: View {
 
     var body: some View {
         content
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color.white.opacity(0.82))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.44), lineWidth: 1)
-            }
+            .widgetOverlayPanelCard()
             .shadow(color: Color.black.opacity(0.08), radius: 14, y: 6)
     }
 }
@@ -427,32 +464,25 @@ private struct RewardRowView: View {
             HStack(spacing: 10) {
                 Image(systemName: reward.isClaimed ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(reward.isClaimed ? Color(red: 0.87, green: 0.31, blue: 0.55) : Color(red: 0.65, green: 0.42, blue: 0.51))
+                    .foregroundStyle(reward.isClaimed ? WidgetPalette.pink : WidgetPalette.unchecked)
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(reward.title)
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .foregroundStyle(reward.isClaimed ? Color(red: 0.58, green: 0.36, blue: 0.43) : Color(red: 0.34, green: 0.15, blue: 0.22))
+                            .foregroundStyle(reward.isClaimed ? WidgetPalette.claimed : WidgetPalette.titlePrimary)
 
                         Spacer(minLength: 0)
 
                         Text(reward.displayValue.inlineDescription(withPlusSign: true))
                             .font(.system(size: 12, weight: .bold, design: .rounded))
-                            .foregroundStyle(reward.isClaimed ? Color(red: 0.58, green: 0.36, blue: 0.43) : Color(red: 0.46, green: 0.17, blue: 0.29))
+                            .foregroundStyle(reward.isClaimed ? WidgetPalette.claimed : WidgetPalette.accent)
                     }
 
                 }
             }
             .padding(11)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(reward.isClaimed ? Color.white.opacity(0.10) : Color.white.opacity(0.18))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.34), lineWidth: 1)
-            }
+            .widgetRoundedCard(fill: reward.isClaimed ? Color.white.opacity(0.10) : Color.white.opacity(0.18))
         }
         .buttonStyle(.plain)
     }
@@ -468,7 +498,7 @@ private struct ManualUnknownRewardRowView: View {
             Button(action: onClaim) {
                 Image(systemName: reward.isClaimed ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(reward.isClaimed ? Color(red: 0.87, green: 0.31, blue: 0.55) : Color(red: 0.65, green: 0.42, blue: 0.51))
+                    .foregroundStyle(reward.isClaimed ? WidgetPalette.pink : WidgetPalette.unchecked)
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)
@@ -477,13 +507,13 @@ private struct ManualUnknownRewardRowView: View {
                 HStack(spacing: 6) {
                     Text(reward.title)
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundStyle(reward.isClaimed ? Color(red: 0.58, green: 0.36, blue: 0.43) : Color(red: 0.34, green: 0.15, blue: 0.22))
+                        .foregroundStyle(reward.isClaimed ? WidgetPalette.claimed : WidgetPalette.titlePrimary)
 
                     Spacer(minLength: 0)
 
                     Text(reward.value.inlineDescription(withPlusSign: true))
                         .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundStyle(reward.isClaimed ? Color(red: 0.58, green: 0.36, blue: 0.43) : Color(red: 0.46, green: 0.17, blue: 0.29))
+                        .foregroundStyle(reward.isClaimed ? WidgetPalette.claimed : WidgetPalette.accent)
                 }
 
             }
@@ -491,19 +521,12 @@ private struct ManualUnknownRewardRowView: View {
             Button(action: onAdvanceCycle) {
                 Image(systemName: "arrow.clockwise.circle")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.58, green: 0.30, blue: 0.42))
+                    .foregroundStyle(WidgetPalette.claimed)
             }
             .buttonStyle(.plain)
         }
         .padding(11)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white.opacity(0.16))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.34), lineWidth: 1)
-            }
+            .widgetRoundedCard(fill: Color.white.opacity(0.16))
         }
 }
 
@@ -519,19 +542,19 @@ private struct SecretPassProgressView: View {
                     HStack(spacing: 6) {
                         Text(progress.title)
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Color(red: 0.34, green: 0.15, blue: 0.22))
+                            .foregroundStyle(WidgetPalette.titlePrimary)
 
                         Spacer(minLength: 0)
 
                         if let remainingText = progress.remainingText {
                             Text(remainingText)
                                 .font(.system(size: 11, weight: .medium, design: .rounded))
-                                .foregroundStyle(Color(red: 0.50, green: 0.24, blue: 0.35))
+                                .foregroundStyle(WidgetPalette.accentSoft)
                         }
 
                         Text("\(progress.claimedCount)/\(progress.slots.count)")
                             .font(.system(size: 12, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color(red: 0.46, green: 0.17, blue: 0.29))
+                            .foregroundStyle(WidgetPalette.accent)
                     }
 
                 }
@@ -539,7 +562,7 @@ private struct SecretPassProgressView: View {
                 Button(action: onAdvanceCycle) {
                     Image(systemName: "arrow.clockwise.circle")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.58, green: 0.30, blue: 0.42))
+                        .foregroundStyle(WidgetPalette.claimed)
                 }
                 .buttonStyle(.plain)
             }
@@ -553,8 +576,8 @@ private struct SecretPassProgressView: View {
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(
                                 slot.isClaimed
-                                    ? Color(red: 0.87, green: 0.31, blue: 0.55)
-                                    : Color(red: 0.65, green: 0.42, blue: 0.51)
+                                    ? WidgetPalette.pink
+                                    : WidgetPalette.unchecked
                             )
                             .frame(width: 24, height: 24)
                     }
@@ -565,18 +588,11 @@ private struct SecretPassProgressView: View {
 
                 Text(progress.slotValue.inlineDescription(withPlusSign: true))
                     .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color(red: 0.53, green: 0.25, blue: 0.36))
+                    .foregroundStyle(WidgetPalette.accentSoft)
             }
         }
         .padding(11)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.16))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.34), lineWidth: 1)
-        }
+        .widgetRoundedCard(fill: Color.white.opacity(0.16))
     }
 }
 

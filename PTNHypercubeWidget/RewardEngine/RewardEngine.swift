@@ -33,24 +33,13 @@ struct RewardEngine {
         }
 
         return RewardSnapshot(
-            currentRewards: rewards.sorted { lhs, rhs in
-                if lhs.isClaimed != rhs.isClaimed {
-                    return !lhs.isClaimed && rhs.isClaimed
-                }
-                if lhs.sortOrder != rhs.sortOrder {
-                    return lhs.sortOrder < rhs.sortOrder
-                }
-                return lhs.title < rhs.title
-            },
-            manualUnknownRewards: makeManualUnknownRewards(
-                claimedKeys: claimedKeys,
-                manualCycleVersions: manualCycleVersions
-            ).sorted { lhs, rhs in
-                if lhs.isClaimed != rhs.isClaimed {
-                    return !lhs.isClaimed && rhs.isClaimed
-                }
-                return lhs.title < rhs.title
-            },
+            currentRewards: sortCurrentRewards(rewards),
+            manualUnknownRewards: sortManualUnknownRewards(
+                makeManualUnknownRewards(
+                    claimedKeys: claimedKeys,
+                    manualCycleVersions: manualCycleVersions
+                )
+            ),
             secretPassProgress: makeSecretPassProgress(
                 claimedKeys: claimedKeys,
                 manualCycleVersions: manualCycleVersions
@@ -286,24 +275,14 @@ struct RewardEngine {
         claimedKeys: Set<String>,
         manualCycleVersions: [String: Int]
     ) -> SecretPassProgress {
-        let version = manualCycleVersions[RewardSchedule.secretPassID] ?? 0
-        let slots = (1...RewardSchedule.secretPassTotalSlots).map { index in
-            let claimKey = "\(RewardSchedule.secretPassID)-v\(version)-slot-\(index)"
-            return SecretPassSlot(
-                id: claimKey,
-                index: index,
-                claimKey: claimKey,
-                isClaimed: claimedKeys.contains(claimKey)
-            )
-        }
-
-        return SecretPassProgress(
+        makeProgress(
             id: RewardSchedule.secretPassID,
             title: RewardSchedule.secretPassTitle,
             slotValue: RewardSchedule.secretPassSlotValue,
-            cycleVersion: version,
-            slots: slots,
-            remainingText: RewardSchedule.secretPassRemainingText
+            slotCount: RewardSchedule.secretPassTotalSlots,
+            remainingText: RewardSchedule.secretPassRemainingText,
+            claimedKeys: claimedKeys,
+            manualCycleVersions: manualCycleVersions
         )
     }
 
@@ -311,9 +290,29 @@ struct RewardEngine {
         claimedKeys: Set<String>,
         manualCycleVersions: [String: Int]
     ) -> SecretPassProgress {
-        let version = manualCycleVersions[RewardSchedule.miniGameID] ?? 0
-        let slots = (1...RewardSchedule.miniGameTotalSlots).map { index in
-            let claimKey = "\(RewardSchedule.miniGameID)-v\(version)-slot-\(index)"
+        makeProgress(
+            id: RewardSchedule.miniGameID,
+            title: RewardSchedule.miniGameTitle,
+            slotValue: RewardSchedule.miniGameSlotValue,
+            slotCount: RewardSchedule.miniGameTotalSlots,
+            remainingText: RewardSchedule.miniGameRemainingText,
+            claimedKeys: claimedKeys,
+            manualCycleVersions: manualCycleVersions
+        )
+    }
+
+    private func makeProgress(
+        id: String,
+        title: String,
+        slotValue: RewardValue,
+        slotCount: Int,
+        remainingText: String?,
+        claimedKeys: Set<String>,
+        manualCycleVersions: [String: Int]
+    ) -> SecretPassProgress {
+        let version = manualCycleVersions[id] ?? 0
+        let slots = (1...slotCount).map { index in
+            let claimKey = "\(id)-v\(version)-slot-\(index)"
             return SecretPassSlot(
                 id: claimKey,
                 index: index,
@@ -323,13 +322,34 @@ struct RewardEngine {
         }
 
         return SecretPassProgress(
-            id: RewardSchedule.miniGameID,
-            title: RewardSchedule.miniGameTitle,
-            slotValue: RewardSchedule.miniGameSlotValue,
+            id: id,
+            title: title,
+            slotValue: slotValue,
             cycleVersion: version,
             slots: slots,
-            remainingText: RewardSchedule.miniGameRemainingText
+            remainingText: remainingText
         )
+    }
+
+    private func sortCurrentRewards(_ rewards: [RewardItem]) -> [RewardItem] {
+        rewards.sorted { lhs, rhs in
+            if lhs.isClaimed != rhs.isClaimed {
+                return !lhs.isClaimed && rhs.isClaimed
+            }
+            if lhs.sortOrder != rhs.sortOrder {
+                return lhs.sortOrder < rhs.sortOrder
+            }
+            return lhs.title < rhs.title
+        }
+    }
+
+    private func sortManualUnknownRewards(_ rewards: [ManualUnknownReward]) -> [ManualUnknownReward] {
+        rewards.sorted { lhs, rhs in
+            if lhs.isClaimed != rhs.isClaimed {
+                return !lhs.isClaimed && rhs.isClaimed
+            }
+            return lhs.title < rhs.title
+        }
     }
 
     func currentDarkZoneClaimKey(on currentDate: Date) -> String {

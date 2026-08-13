@@ -143,22 +143,12 @@ final class AppStateStore: ObservableObject {
     }
 
     func claim(_ reward: RewardItem, now: Date = Date()) {
-        guard !claimedRewardKeys.contains(reward.claimKey) else { return }
-
-        apply(value: reward.claimValue)
-        claimedRewardKeys.insert(reward.claimKey)
-        history.insert(
-            HistoryEntry(
-                timestamp: now,
-                source: reward.claimSource,
-                value: reward.claimValue,
-                claimKey: reward.claimKey
-            ),
-            at: 0
+        recordClaim(
+            claimKey: reward.claimKey,
+            value: reward.claimValue,
+            source: reward.claimSource,
+            now: now
         )
-
-        persist()
-        refreshRewards(now: now)
     }
 
     func toggle(_ reward: RewardItem, now: Date = Date()) {
@@ -170,22 +160,12 @@ final class AppStateStore: ObservableObject {
     }
 
     func claimManualUnknown(_ reward: ManualUnknownReward, now: Date = Date()) {
-        guard !claimedRewardKeys.contains(reward.claimKey) else { return }
-
-        apply(value: reward.value)
-        claimedRewardKeys.insert(reward.claimKey)
-        history.insert(
-            HistoryEntry(
-                timestamp: now,
-                source: reward.claimSource,
-                value: reward.value,
-                claimKey: reward.claimKey
-            ),
-            at: 0
+        recordClaim(
+            claimKey: reward.claimKey,
+            value: reward.value,
+            source: reward.claimSource,
+            now: now
         )
-
-        persist()
-        refreshRewards(now: now)
     }
 
     func toggleManualUnknown(_ reward: ManualUnknownReward, now: Date = Date()) {
@@ -197,22 +177,12 @@ final class AppStateStore: ObservableObject {
     }
 
     func claimSecretPassSlot(_ slot: SecretPassSlot, now: Date = Date()) {
-        guard !claimedRewardKeys.contains(slot.claimKey) else { return }
-
-        apply(value: RewardSchedule.secretPassSlotValue)
-        claimedRewardKeys.insert(slot.claimKey)
-        history.insert(
-            HistoryEntry(
-                timestamp: now,
-                source: "\(RewardSchedule.secretPassTitle) 第\(slot.index)抽",
-                value: RewardSchedule.secretPassSlotValue,
-                claimKey: slot.claimKey
-            ),
-            at: 0
+        recordClaim(
+            claimKey: slot.claimKey,
+            value: RewardSchedule.secretPassSlotValue,
+            source: "\(RewardSchedule.secretPassTitle) 第\(slot.index)抽",
+            now: now
         )
-
-        persist()
-        refreshRewards(now: now)
     }
 
     func toggleSecretPassSlot(_ slot: SecretPassSlot, now: Date = Date()) {
@@ -224,22 +194,12 @@ final class AppStateStore: ObservableObject {
     }
 
     func claimMiniGameSlot(_ slot: SecretPassSlot, now: Date = Date()) {
-        guard !claimedRewardKeys.contains(slot.claimKey) else { return }
-
-        apply(value: RewardSchedule.miniGameSlotValue)
-        claimedRewardKeys.insert(slot.claimKey)
-        history.insert(
-            HistoryEntry(
-                timestamp: now,
-                source: "\(RewardSchedule.miniGameTitle) 第\(slot.index)关",
-                value: RewardSchedule.miniGameSlotValue,
-                claimKey: slot.claimKey
-            ),
-            at: 0
+        recordClaim(
+            claimKey: slot.claimKey,
+            value: RewardSchedule.miniGameSlotValue,
+            source: "\(RewardSchedule.miniGameTitle) 第\(slot.index)关",
+            now: now
         )
-
-        persist()
-        refreshRewards(now: now)
     }
 
     func toggleMiniGameSlot(_ slot: SecretPassSlot, now: Date = Date()) {
@@ -373,6 +333,30 @@ final class AppStateStore: ObservableObject {
         if let index = history.firstIndex(where: { $0.claimKey == claimKey }) {
             history.remove(at: index)
         }
+
+        persist()
+        refreshRewards(now: now)
+    }
+
+    private func recordClaim(
+        claimKey: String,
+        value: RewardValue,
+        source: String,
+        now: Date
+    ) {
+        guard !claimedRewardKeys.contains(claimKey) else { return }
+
+        apply(value: value)
+        claimedRewardKeys.insert(claimKey)
+        history.insert(
+            HistoryEntry(
+                timestamp: now,
+                source: source,
+                value: value,
+                claimKey: claimKey
+            ),
+            at: 0
+        )
 
         persist()
         refreshRewards(now: now)

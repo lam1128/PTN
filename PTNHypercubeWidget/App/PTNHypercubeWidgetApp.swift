@@ -24,6 +24,8 @@ final class WidgetAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
     private var statusItem: NSStatusItem?
     private var statusMenu: NSMenu?
     private let windowOriginDefaultsKey = "ptn.widgetWindowOrigin"
+    // 放在桌面图标层之上一层：
+    // 既保持“桌面组件”观感，又能避免 Finder 桌面层吃掉滚动和拖动事件。
     private let desktopLevel = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
