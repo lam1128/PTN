@@ -1,0 +1,12 @@
+.DS_Store
+
+dist/
+
+DerivedData/
+.build/
+
+*.swp
+*.tmp
+
+PTNHypercubeWidget.xcodeproj/xcuserdata/
+PTNHypercubeWidget.xcodeproj/project.xcworkspace/xcuserdata/

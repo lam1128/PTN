@@ -1,0 +1,979 @@
+import AppKit
+import SwiftUI
+
+struct MainWidgetView: View {
+    @ObservedObject var store: AppStateStore
+
+    @State private var activeSheet: ActiveSheet?
+    @State private var selectedPrimarySection: PrimarySection = .currentPeriod
+    @State private var expandedPullPlanBannerIDs: Set<String> = []
+    private let refreshTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.white.opacity(0.002)
+
+                if store.usesExtraTranslucentBackground {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                } else {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                }
+
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 1.0, green: 0.95, blue: 0.97).opacity(store.usesExtraTranslucentBackground ? 0.24 : 0.62),
+                                Color(red: 0.97, green: 0.89, blue: 0.93).opacity(store.usesExtraTranslucentBackground ? 0.16 : 0.50),
+                                Color(red: 0.95, green: 0.85, blue: 0.91).opacity(store.usesExtraTranslucentBackground ? 0.10 : 0.42)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(store.usesExtraTranslucentBackground ? 0.08 : 0.24),
+                                Color.white.opacity(store.usesExtraTranslucentBackground ? 0.02 : 0.08),
+                                Color.clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        headerSection
+
+                        primarySectionTabs
+
+                        RoundedRectangle(cornerRadius: 999, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.14),
+                                        Color(red: 0.84, green: 0.60, blue: 0.72).opacity(0.88),
+                                        Color.white.opacity(0.14)
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(height: 1.5)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
+
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            primarySectionContent
+
+                            if selectedPrimarySection == .currentPeriod {
+                                manualUnknownSection
+                            }
+
+                            footerSection
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 14)
+                        .padding(.bottom, 16)
+                    }
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            NSApp.keyWindow?.makeFirstResponder(nil)
+                        }
+                    )
+                }
+                .blur(radius: activeSheet == nil ? 0 : 2)
+                .opacity(activeSheet == nil ? 1 : 0.28)
+                .animation(.easeInOut(duration: 0.14), value: activeSheet)
+
+                if let activeSheet {
+                    Color.black.opacity(0.24)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            self.activeSheet = nil
+                        }
+
+                    panelView(for: activeSheet)
+                        .padding(12)
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.34), lineWidth: 1)
+            }
+            .overlay(alignment: .top) {
+                WindowDragHandle()
+                    .frame(height: 18)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .background(Color.clear)
+        }
+        .frame(width: 340, height: 430)
+        .onAppear {
+            store.refreshRewards()
+        }
+        .onReceive(refreshTimer) { now in
+            store.refreshRewards(now: now)
+        }
+        .animation(.easeInOut(duration: 0.16), value: activeSheet)
+    }
+
+    private var headerSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                HStack(alignment: .top, spacing: 18) {
+                    summaryMetric(
+                        title: "总抽数",
+                        value: store.totalDrawCountFloor.formatted(.number.grouping(.automatic))
+                    )
+
+                    summaryMetric(
+                        title: "UP数",
+                        value: "\(store.totalPlannedUpCount)"
+                    )
+                }
+
+                Spacer(minLength: 0)
+
+                HStack(alignment: .center, spacing: 8) {
+                    Text(DayStamp.rewardDay(from: Date()).key)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color(red: 0.50, green: 0.24, blue: 0.35))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.white.opacity(0.32), in: Capsule())
+
+                    Button {
+                        activeSheet = .editInventory
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(width: 30, height: 30)
+                            .background(Color.white.opacity(0.34), in: Circle())
+                            .foregroundStyle(Color(red: 0.50, green: 0.20, blue: 0.31))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            HStack(spacing: 10) {
+                Text("蓝票：\(store.totalBlueTickets)")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color(red: 0.50, green: 0.24, blue: 0.35))
+
+                Text("红票：\(store.totalRedTickets)")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color(red: 0.50, green: 0.24, blue: 0.35))
+
+                Text("异方晶：\(store.totalCrystals)")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color(red: 0.50, green: 0.24, blue: 0.35))
+            }
+        }
+    }
+
+    private func summaryMetric(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color(red: 0.44, green: 0.21, blue: 0.30))
+
+            Text(value)
+                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(red: 0.34, green: 0.15, blue: 0.22))
+        }
+        .frame(minWidth: 58, alignment: .leading)
+    }
+
+    private var primarySectionTabs: some View {
+        HStack(spacing: 8) {
+            primaryTabButton(.currentPeriod, title: "当前周期")
+            primaryTabButton(.pullPlan, title: "抽卡规划")
+            Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder
+    private var primarySectionContent: some View {
+        switch selectedPrimarySection {
+        case .currentPeriod:
+            currentPeriodSection
+        case .pullPlan:
+            pullPlanSection
+        }
+    }
+
+    private var currentPeriodSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if store.currentRewards.isEmpty {
+                Text("今天没有可显示的周期项")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 8)
+            } else {
+                ForEach(store.currentRewards) { reward in
+                    RewardRowView(reward: reward) {
+                        store.toggle(reward)
+                    }
+                }
+            }
+        }
+    }
+
+    private var manualUnknownSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("时间未知，手动记录")
+
+            ForEach(store.manualUnknownRewards) { reward in
+                ManualUnknownRewardRowView(
+                    reward: reward,
+                    onClaim: { store.toggleManualUnknown(reward) },
+                    onAdvanceCycle: { store.advanceManualCycle(for: reward.id) }
+                )
+            }
+
+            SecretPassProgressView(
+                progress: store.secretPassProgress,
+                onTapSlot: { slot in store.toggleSecretPassSlot(slot) },
+                onAdvanceCycle: { store.advanceManualCycle(for: RewardSchedule.secretPassID) }
+            )
+
+            SecretPassProgressView(
+                progress: store.miniGameProgress,
+                onTapSlot: { slot in store.toggleMiniGameSlot(slot) },
+                onAdvanceCycle: { store.advanceManualCycle(for: RewardSchedule.miniGameID) }
+            )
+        }
+    }
+
+    private var pullPlanSection: some View {
+        let currentDate = Date()
+        let banners = RewardSchedule.pullPlanBanners
+            .filter { $0.endsAt() > currentDate }
+            .sorted { lhs, rhs in
+                if lhs.isActive(at: currentDate) != rhs.isActive(at: currentDate) {
+                    return lhs.isActive(at: currentDate)
+                }
+                return lhs.start < rhs.start
+            }
+
+        return VStack(alignment: .leading, spacing: 10) {
+            if banners.isEmpty {
+                Text("当前没有已填写的抽卡规划")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 8)
+            } else {
+                ForEach(banners) { banner in
+                    let isActive = banner.isActive(at: currentDate)
+                    let progress = store.pullPlanBannerProgress(for: banner.id, allowCompleted: isActive)
+                    PullPlanBannerCardView(
+                        banner: banner,
+                        isActive: isActive,
+                        currentDate: currentDate,
+                        progress: progress,
+                        pityValue: store.pullPlanPityValue(for: banner.id),
+                        selectedUpCharacter: store.selectedPullPlanUpChoices[banner.id],
+                        selectedLockLevel: store.selectedPullPlanLockChoices[banner.id],
+                        isExpanded: expandedPullPlanBannerIDs.contains(banner.id),
+                        onToggleBanner: { store.togglePullPlanBanner(banner.id, allowCompleted: isActive) },
+                        onSetPityValue: { value in
+                            store.setPullPlanPityValue(for: banner.id, value: value)
+                        },
+                        onToggleUpCharacter: { character in
+                            store.togglePullPlanUpChoice(bannerID: banner.id, character: character)
+                        },
+                        onToggleLockLevel: { lockLevel in
+                            store.togglePullPlanLockChoice(bannerID: banner.id, lockLevel: lockLevel)
+                        },
+                        onToggleExpand: {
+                            if expandedPullPlanBannerIDs.contains(banner.id) {
+                                expandedPullPlanBannerIDs.remove(banner.id)
+                            } else {
+                                expandedPullPlanBannerIDs.insert(banner.id)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    private var footerSection: some View {
+        HStack(spacing: 8) {
+            Button {
+                activeSheet = .history
+            } label: {
+                Label("历史", systemImage: "clock.arrow.circlepath")
+            }
+            .buttonStyle(.bordered)
+
+            Spacer(minLength: 0)
+
+            if let todayTotal = store.todayCrystalEquivalentText {
+                Text("今日：\(todayTotal)")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color(red: 0.50, green: 0.24, blue: 0.35))
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 15, weight: .semibold, design: .rounded))
+    }
+
+    private func primaryTabButton(_ section: PrimarySection, title: String) -> some View {
+        Button {
+            selectedPrimarySection = section
+        } label: {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(
+                    selectedPrimarySection == section
+                        ? Color(red: 0.48, green: 0.17, blue: 0.29)
+                        : Color(red: 0.56, green: 0.35, blue: 0.43)
+                )
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(
+                            selectedPrimarySection == section
+                                ? Color.white.opacity(0.42)
+                                : Color.white.opacity(0.16)
+                        )
+                )
+                .overlay {
+                    Capsule(style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.30), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func panelView(for sheet: ActiveSheet) -> some View {
+        switch sheet {
+        case .editInventory:
+            OverlayPanel {
+                EditInventorySheet(
+                    currentCrystals: store.totalCrystals,
+                    currentBlueTickets: store.totalBlueTickets,
+                    currentRedTickets: store.totalRedTickets
+                ) { crystals, blueTickets, redTickets in
+                    store.setInventory(
+                        crystals: crystals,
+                        blueTickets: blueTickets,
+                        redTickets: redTickets
+                    )
+                    activeSheet = nil
+                } onClose: {
+                    activeSheet = nil
+                }
+            }
+            .frame(width: 310)
+        case .history:
+            OverlayPanel {
+                HistorySheetView(store: store) {
+                    activeSheet = nil
+                }
+            }
+            .frame(width: 310, height: 350)
+        }
+    }
+}
+
+private struct OverlayPanel<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color.white.opacity(0.82))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.44), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.08), radius: 14, y: 6)
+    }
+}
+
+private struct RewardRowView: View {
+    let reward: RewardItem
+    let onClaim: () -> Void
+
+    var body: some View {
+        Button(action: onClaim) {
+            HStack(spacing: 10) {
+                Image(systemName: reward.isClaimed ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(reward.isClaimed ? Color(red: 0.87, green: 0.31, blue: 0.55) : Color(red: 0.65, green: 0.42, blue: 0.51))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(reward.title)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(reward.isClaimed ? Color(red: 0.58, green: 0.36, blue: 0.43) : Color(red: 0.34, green: 0.15, blue: 0.22))
+
+                        Spacer(minLength: 0)
+
+                        Text(reward.displayValue.inlineDescription(withPlusSign: true))
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundStyle(reward.isClaimed ? Color(red: 0.58, green: 0.36, blue: 0.43) : Color(red: 0.46, green: 0.17, blue: 0.29))
+                    }
+
+                }
+            }
+            .padding(11)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(reward.isClaimed ? Color.white.opacity(0.10) : Color.white.opacity(0.18))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.34), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ManualUnknownRewardRowView: View {
+    let reward: ManualUnknownReward
+    let onClaim: () -> Void
+    let onAdvanceCycle: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(action: onClaim) {
+                Image(systemName: reward.isClaimed ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(reward.isClaimed ? Color(red: 0.87, green: 0.31, blue: 0.55) : Color(red: 0.65, green: 0.42, blue: 0.51))
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(reward.title)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(reward.isClaimed ? Color(red: 0.58, green: 0.36, blue: 0.43) : Color(red: 0.34, green: 0.15, blue: 0.22))
+
+                    Spacer(minLength: 0)
+
+                    Text(reward.value.inlineDescription(withPlusSign: true))
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(reward.isClaimed ? Color(red: 0.58, green: 0.36, blue: 0.43) : Color(red: 0.46, green: 0.17, blue: 0.29))
+                }
+
+            }
+
+            Button(action: onAdvanceCycle) {
+                Image(systemName: "arrow.clockwise.circle")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.58, green: 0.30, blue: 0.42))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(11)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(0.16))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.34), lineWidth: 1)
+            }
+        }
+}
+
+private struct SecretPassProgressView: View {
+    let progress: SecretPassProgress
+    let onTapSlot: (SecretPassSlot) -> Void
+    let onAdvanceCycle: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(progress.title)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Color(red: 0.34, green: 0.15, blue: 0.22))
+
+                        Spacer(minLength: 0)
+
+                        if let remainingText = progress.remainingText {
+                            Text(remainingText)
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(Color(red: 0.50, green: 0.24, blue: 0.35))
+                        }
+
+                        Text("\(progress.claimedCount)/\(progress.slots.count)")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color(red: 0.46, green: 0.17, blue: 0.29))
+                    }
+
+                }
+
+                Button(action: onAdvanceCycle) {
+                    Image(systemName: "arrow.clockwise.circle")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.58, green: 0.30, blue: 0.42))
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack(spacing: 10) {
+                ForEach(progress.slots) { slot in
+                    Button(action: {
+                        onTapSlot(slot)
+                    }) {
+                        Image(systemName: slot.isClaimed ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(
+                                slot.isClaimed
+                                    ? Color(red: 0.87, green: 0.31, blue: 0.55)
+                                    : Color(red: 0.65, green: 0.42, blue: 0.51)
+                            )
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Spacer(minLength: 0)
+
+                Text(progress.slotValue.inlineDescription(withPlusSign: true))
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color(red: 0.53, green: 0.25, blue: 0.36))
+            }
+        }
+        .padding(11)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.16))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.34), lineWidth: 1)
+        }
+    }
+}
+
+private struct PullPlanBannerCardView: View {
+    let banner: PullPlanBanner
+    let isActive: Bool
+    let currentDate: Date
+    let progress: PullPlanBannerProgress
+    let pityValue: Int?
+    let selectedUpCharacter: String?
+    let selectedLockLevel: Int?
+    let isExpanded: Bool
+    let onToggleBanner: () -> Void
+    let onSetPityValue: (Int?) -> Void
+    let onToggleUpCharacter: (String) -> Void
+    let onToggleLockLevel: (Int) -> Void
+    let onToggleExpand: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Button(action: onToggleBanner) {
+                Image(systemName: progress == .none ? "circle" : "checkmark.circle.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(circleColor)
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+
+            ZStack(alignment: .topLeading) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .center, spacing: 6) {
+                        Text(titleBaseText)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+
+                        if let titleSuffixText {
+                            Text("· \(titleSuffixText)")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
+                        }
+
+                        if banner.supportsPopupSelection {
+                            Button(action: onToggleExpand) {
+                                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(Color(red: 0.52, green: 0.26, blue: 0.36))
+                                    .frame(width: 18, height: 18)
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        statusColumn
+                    }
+
+                    HStack(alignment: .center, spacing: 8) {
+                        Text(banner.localDisplayRange())
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color(red: 0.54, green: 0.31, blue: 0.40))
+
+                        Spacer(minLength: 0)
+
+                        PullPlanPityField(value: pityValue, onSetValue: onSetPityValue)
+
+                        Text(countdownText)
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color(red: 0.54, green: 0.31, blue: 0.40))
+                            .frame(width: 34, alignment: .trailing)
+                            .padding(.trailing, 4)
+                    }
+                }
+
+                if banner.supportsPopupSelection && isExpanded {
+                    selectionPopup
+                        .offset(x: 0, y: 38)
+                        .zIndex(2)
+                }
+            }
+        }
+        .padding(11)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(backgroundFillColor)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.34), lineWidth: 1)
+        }
+    }
+
+    private var titleBaseText: String {
+        banner.title
+    }
+
+    private var circleColor: Color {
+        switch progress {
+        case .none:
+            return Color(red: 0.65, green: 0.42, blue: 0.51)
+        case .planned:
+            return Color(red: 0.87, green: 0.31, blue: 0.55)
+        case .completed:
+            return Color(red: 0.34, green: 0.67, blue: 0.61)
+        }
+    }
+
+    private var primaryTextColor: Color {
+        switch progress {
+        case .none:
+            return Color(red: 0.34, green: 0.15, blue: 0.22)
+        case .planned:
+            return Color(red: 0.58, green: 0.36, blue: 0.43)
+        case .completed:
+            return Color(red: 0.27, green: 0.47, blue: 0.43)
+        }
+    }
+
+    private var secondaryTextColor: Color {
+        switch progress {
+        case .completed:
+            return Color(red: 0.35, green: 0.58, blue: 0.53)
+        case .none, .planned:
+            return Color(red: 0.52, green: 0.26, blue: 0.36)
+        }
+    }
+
+    private var backgroundFillColor: Color {
+        switch progress {
+        case .none:
+            return Color.white.opacity(0.18)
+        case .planned:
+            return Color.white.opacity(0.12)
+        case .completed:
+            return Color(red: 0.83, green: 0.95, blue: 0.91).opacity(0.34)
+        }
+    }
+
+    private var titleSuffixText: String? {
+        switch banner.selectionKind {
+        case .targetChoice:
+            return selectedUpCharacter
+        case .lockCount:
+            if let character = banner.characters.first, let selectedLockLevel {
+                return "\(character) · \(selectedLockLevel)锁"
+            }
+            return banner.characters.first
+        case .none:
+            return banner.characters.first
+        }
+    }
+
+    private var countdownText: String {
+        let calendar = Calendar.rewardCalendar
+        let targetDate = isActive ? banner.endsAt(in: calendar) : banner.startsAt(in: calendar)
+        let interval = max(0, targetDate.timeIntervalSince(currentDate))
+
+        if interval < 86_400 {
+            let totalMinutes = Int(interval / 60)
+            let hours = totalMinutes / 60
+            let minutes = totalMinutes % 60
+            return String(format: "%02d:%02d", hours, minutes)
+        }
+
+        let days = Int(interval / 86_400)
+        return "\(days)天"
+    }
+
+    @ViewBuilder
+    private var statusColumn: some View {
+        VStack(alignment: .trailing, spacing: 5) {
+            Text(isActive ? "进行中" : "未开始")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(isActive ? Color(red: 0.82, green: 0.30, blue: 0.53) : Color(red: 0.54, green: 0.31, blue: 0.40))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.28), in: Capsule())
+        }
+    }
+
+    private var selectionPopup: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            switch banner.selectionKind {
+            case .targetChoice:
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], alignment: .leading, spacing: 8) {
+                    ForEach(banner.characters, id: \.self) { character in
+                        Button {
+                            onToggleUpCharacter(character)
+                            onToggleExpand()
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: selectedUpCharacter == character ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 12, weight: .semibold))
+
+                                Text(character)
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .lineLimit(1)
+                            }
+                            .foregroundStyle(
+                                selectedUpCharacter == character
+                                    ? Color(red: 0.82, green: 0.30, blue: 0.53)
+                                    : Color(red: 0.52, green: 0.26, blue: 0.36)
+                            )
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(
+                                        selectedUpCharacter == character
+                                            ? Color.white.opacity(0.34)
+                                            : Color.white.opacity(0.16)
+                                    )
+                            )
+                            .overlay {
+                                Capsule(style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.26), lineWidth: 1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            case .lockCount:
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], alignment: .leading, spacing: 8) {
+                    ForEach(0...5, id: \.self) { lockLevel in
+                        Button {
+                            onToggleLockLevel(lockLevel)
+                            onToggleExpand()
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: selectedLockLevel == lockLevel ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 12, weight: .semibold))
+
+                                Text("\(lockLevel)锁")
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .lineLimit(1)
+                            }
+                            .foregroundStyle(
+                                selectedLockLevel == lockLevel
+                                    ? Color(red: 0.82, green: 0.30, blue: 0.53)
+                                    : Color(red: 0.52, green: 0.26, blue: 0.36)
+                            )
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(
+                                        selectedLockLevel == lockLevel
+                                            ? Color.white.opacity(0.34)
+                                            : Color.white.opacity(0.16)
+                                    )
+                            )
+                            .overlay {
+                                Capsule(style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.26), lineWidth: 1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            case .none:
+                EmptyView()
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.90))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.44), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.08), radius: 10, y: 4)
+    }
+}
+
+private struct PullPlanPityField: View {
+    let value: Int?
+    let onSetValue: (Int?) -> Void
+
+    @State private var text: String = ""
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text("垫抽")
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(Color(red: 0.54, green: 0.31, blue: 0.40))
+
+            ZStack {
+                if isFocused {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.white.opacity(0.20))
+
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color(red: 0.82, green: 0.56, blue: 0.67).opacity(0.72), lineWidth: 1)
+                } else {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color(red: 0.78, green: 0.56, blue: 0.66).opacity(0.34), lineWidth: 1)
+                }
+
+                if text.isEmpty && !isFocused {
+                    Text("0")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(red: 0.54, green: 0.31, blue: 0.40).opacity(0.78))
+                }
+
+                TextField("", text: editingText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.46, green: 0.17, blue: 0.29))
+                    .multilineTextAlignment(.center)
+                    .focused($isFocused)
+                    .onSubmit {
+                        commitText()
+                        isFocused = false
+                    }
+            }
+            .frame(width: 34, height: 24)
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .onTapGesture {
+                isFocused = true
+            }
+        }
+        .onAppear {
+            syncText(with: value)
+        }
+        .onChange(of: value) { _, newValue in
+            syncText(with: newValue)
+        }
+        .onChange(of: isFocused) { _, newValue in
+            if !newValue {
+                commitText()
+            }
+        }
+    }
+
+    private var editingText: Binding<String> {
+        Binding(
+            get: { text },
+            set: { newValue in
+                text = filteredText(from: newValue)
+            }
+        )
+    }
+
+    private func syncText(with value: Int?) {
+        let newText = value.map(String.init) ?? ""
+        if newText != text {
+            text = newText
+        }
+    }
+
+    private func filteredText(from rawText: String) -> String {
+        String(rawText.filter(\.isNumber).prefix(3))
+    }
+
+    private func commitText() {
+        let committedText = filteredText(from: text)
+        if committedText != text {
+            text = committedText
+        }
+        onSetValue(committedText.isEmpty ? nil : Int(committedText))
+    }
+}
+
+private struct WindowDragHandle: NSViewRepresentable {
+    func makeNSView(context: Context) -> DragHandleNSView {
+        DragHandleNSView()
+    }
+
+    func updateNSView(_ nsView: DragHandleNSView, context: Context) {}
+}
+
+private final class DragHandleNSView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        self
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.performDrag(with: event)
+    }
+}
+
+private enum PrimarySection: String {
+    case currentPeriod
+    case pullPlan
+}
+
+private enum ActiveSheet: String, Identifiable {
+    case editInventory
+    case history
+
+    var id: String { rawValue }
+}

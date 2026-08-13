@@ -1,0 +1,381 @@
+import Foundation
+
+enum RewardCategory: String, Codable, Hashable {
+    case daily
+    case weekly
+    case monthly
+    case eventTrial
+    case darkZone
+    case dataGap
+    case unknownSchedule
+    case manualAdjustment
+}
+
+enum PullPlanSelectionKind: String, Codable, Hashable {
+    case none
+    case targetChoice
+    case lockCount
+}
+
+enum PullPlanBannerProgress: Int, Codable, Hashable {
+    case none = 0
+    case planned = 1
+    case completed = 2
+}
+
+struct RewardValue: Codable, Hashable {
+    let crystals: Int
+    let blueTickets: Int
+    let redTickets: Int
+
+    init(crystals: Int = 0, blueTickets: Int = 0, redTickets: Int = 0) {
+        self.crystals = crystals
+        self.blueTickets = blueTickets
+        self.redTickets = redTickets
+    }
+
+    var drawEquivalent: Double {
+        Double(crystals) / 180.0 + Double(blueTickets + redTickets)
+    }
+
+    var isZero: Bool {
+        crystals == 0 && blueTickets == 0 && redTickets == 0
+    }
+
+    static let zero = RewardValue()
+
+    static func + (lhs: RewardValue, rhs: RewardValue) -> RewardValue {
+        RewardValue(
+            crystals: lhs.crystals + rhs.crystals,
+            blueTickets: lhs.blueTickets + rhs.blueTickets,
+            redTickets: lhs.redTickets + rhs.redTickets
+        )
+    }
+
+    static func - (lhs: RewardValue, rhs: RewardValue) -> RewardValue {
+        RewardValue(
+            crystals: lhs.crystals - rhs.crystals,
+            blueTickets: lhs.blueTickets - rhs.blueTickets,
+            redTickets: lhs.redTickets - rhs.redTickets
+        )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case crystals
+        case blueTickets
+        case redTickets
+        case tickets
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let crystals = try container.decodeIfPresent(Int.self, forKey: .crystals) ?? 0
+        let blueTickets = try container.decodeIfPresent(Int.self, forKey: .blueTickets)
+            ?? container.decodeIfPresent(Int.self, forKey: .tickets)
+            ?? 0
+        let redTickets = try container.decodeIfPresent(Int.self, forKey: .redTickets) ?? 0
+        self.init(crystals: crystals, blueTickets: blueTickets, redTickets: redTickets)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(crystals, forKey: .crystals)
+        try container.encode(blueTickets, forKey: .blueTickets)
+        try container.encode(redTickets, forKey: .redTickets)
+    }
+}
+
+struct DayStamp: Codable, Hashable, Comparable {
+    let year: Int
+    let month: Int
+    let day: Int
+
+    init(year: Int, month: Int, day: Int) {
+        self.year = year
+        self.month = month
+        self.day = day
+    }
+
+    var key: String {
+        String(format: "%04d-%02d-%02d", year, month, day)
+    }
+
+    func date(in calendar: Calendar = .rewardCalendar) -> Date {
+        let components = DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: year,
+            month: month,
+            day: day,
+            hour: 12
+        )
+        guard let date = calendar.date(from: components) else {
+            fatalError("Unable to construct date for \(key)")
+        }
+        return date
+    }
+
+    static func from(_ date: Date, calendar: Calendar = .rewardCalendar) -> DayStamp {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return DayStamp(
+            year: components.year ?? 1970,
+            month: components.month ?? 1,
+            day: components.day ?? 1
+        )
+    }
+
+    static func rewardDay(from date: Date, calendar: Calendar = .rewardCalendar) -> DayStamp {
+        DayStamp.from(calendar.rewardReferenceDate(for: date), calendar: calendar)
+    }
+
+    static func bannerDay(from date: Date, calendar: Calendar = .rewardCalendar) -> DayStamp {
+        DayStamp.from(calendar.bannerReferenceDate(for: date), calendar: calendar)
+    }
+
+    static func < (lhs: DayStamp, rhs: DayStamp) -> Bool {
+        if lhs.year != rhs.year { return lhs.year < rhs.year }
+        if lhs.month != rhs.month { return lhs.month < rhs.month }
+        return lhs.day < rhs.day
+    }
+}
+
+struct RewardItem: Identifiable, Hashable {
+    let id: String
+    let category: RewardCategory
+    let title: String
+    let footnote: String?
+    let displayValue: RewardValue
+    let claimValue: RewardValue
+    let claimSource: String
+    let claimKey: String
+    let sortOrder: Int
+    let isClaimed: Bool
+}
+
+struct ManualUnknownReward: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let value: RewardValue
+    let claimSource: String
+    let claimKey: String
+    let cycleVersion: Int
+    let isClaimed: Bool
+}
+
+struct PullPlanBanner: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let start: DayStamp
+    let end: DayStamp
+    let startHour: Int
+    let startMinute: Int
+    let endHour: Int
+    let endMinute: Int
+    let timeZoneIdentifier: String?
+    let characters: [String]
+    let selectionKind: PullPlanSelectionKind
+
+    init(
+        id: String,
+        title: String,
+        start: DayStamp,
+        end: DayStamp,
+        startHour: Int = 15,
+        startMinute: Int = 0,
+        endHour: Int = 15,
+        endMinute: Int = 0,
+        timeZoneIdentifier: String? = nil,
+        characters: [String],
+        selectionKind: PullPlanSelectionKind = .none
+    ) {
+        self.id = id
+        self.title = title
+        self.start = start
+        self.end = end
+        self.startHour = startHour
+        self.startMinute = startMinute
+        self.endHour = endHour
+        self.endMinute = endMinute
+        self.timeZoneIdentifier = timeZoneIdentifier
+        self.characters = characters
+        self.selectionKind = selectionKind
+    }
+
+    var supportsPopupSelection: Bool {
+        selectionKind != .none
+    }
+
+    var usesPreciseTimeDisplay: Bool {
+        timeZoneIdentifier != nil
+            || startHour != Calendar.rewardCalendar.bannerRefreshHour
+            || startMinute != 0
+            || endHour != Calendar.rewardCalendar.bannerRefreshHour
+            || endMinute != 0
+    }
+
+    func startsAt(in calendar: Calendar = .rewardCalendar) -> Date {
+        var resolvedCalendar = calendar
+        if let timeZoneIdentifier, let timeZone = TimeZone(identifier: timeZoneIdentifier) {
+            resolvedCalendar.timeZone = timeZone
+        }
+
+        var components = DateComponents()
+        components.year = start.year
+        components.month = start.month
+        components.day = start.day
+        components.hour = startHour
+        components.minute = startMinute
+        components.second = 0
+        return resolvedCalendar.date(from: components) ?? start.date(in: resolvedCalendar)
+    }
+
+    func endsAt(in calendar: Calendar = .rewardCalendar) -> Date {
+        var resolvedCalendar = calendar
+        if let timeZoneIdentifier, let timeZone = TimeZone(identifier: timeZoneIdentifier) {
+            resolvedCalendar.timeZone = timeZone
+        }
+
+        var components = DateComponents()
+        components.year = end.year
+        components.month = end.month
+        components.day = end.day
+        components.hour = endHour
+        components.minute = endMinute
+        components.second = 0
+        return resolvedCalendar.date(from: components) ?? end.date(in: resolvedCalendar)
+    }
+
+    func isActive(at date: Date, calendar: Calendar = .rewardCalendar) -> Bool {
+        let startDate = startsAt(in: calendar)
+        let endDate = endsAt(in: calendar)
+        return date >= startDate && date < endDate
+    }
+
+    func isUpcoming(at date: Date, calendar: Calendar = .rewardCalendar) -> Bool {
+        date < startsAt(in: calendar)
+    }
+
+    func localDisplayRange(locale: Locale = Locale.autoupdatingCurrent) -> String {
+        let startDate = startsAt()
+        let endDate = endsAt()
+
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.dateFormat = "yyyy-MM-dd"
+
+        return "\(formatter.string(from: startDate)) - \(formatter.string(from: endDate))"
+    }
+}
+
+struct SecretPassSlot: Identifiable, Hashable {
+    let id: String
+    let index: Int
+    let claimKey: String
+    let isClaimed: Bool
+}
+
+struct SecretPassProgress: Hashable {
+    let id: String
+    let title: String
+    let slotValue: RewardValue
+    let cycleVersion: Int
+    let slots: [SecretPassSlot]
+    let remainingText: String?
+
+    var claimedCount: Int {
+        slots.filter(\.isClaimed).count
+    }
+}
+
+struct HistoryEntry: Identifiable, Codable, Hashable {
+    let id: UUID
+    let timestamp: Date
+    let source: String
+    let value: RewardValue
+    let claimKey: String?
+
+    init(
+        id: UUID = UUID(),
+        timestamp: Date,
+        source: String,
+        value: RewardValue,
+        claimKey: String?
+    ) {
+        self.id = id
+        self.timestamp = timestamp
+        self.source = source
+        self.value = value
+        self.claimKey = claimKey
+    }
+
+    var amountText: String {
+        value.inlineDescription(withPlusSign: true)
+    }
+}
+
+extension RewardValue {
+    var crystalEquivalent: Int {
+        crystals + (blueTickets + redTickets) * 180
+    }
+
+    func crystalEquivalentDescription(withPlusSign: Bool) -> String {
+        let value = crystalEquivalent
+        let sign = withPlusSign && value >= 0 ? "+" : ""
+        return "\(sign)\(value)晶"
+    }
+
+    func inlineDescription(withPlusSign: Bool) -> String {
+        let crystalSign = withPlusSign && crystals >= 0 ? "+" : ""
+        let blueTicketSign = withPlusSign && blueTickets >= 0 ? "+" : ""
+        let redTicketSign = withPlusSign && redTickets >= 0 ? "+" : ""
+        var components: [String] = []
+
+        if crystals != 0 {
+            components.append("\(crystalSign)\(crystals)晶")
+        }
+
+        if blueTickets != 0 {
+            components.append("\(blueTicketSign)\(blueTickets)蓝票")
+        }
+
+        if redTickets != 0 {
+            components.append("\(redTicketSign)\(redTickets)红票")
+        }
+
+        if components.isEmpty {
+            return withPlusSign ? "+0" : "0"
+        }
+
+        return components.joined(separator: " · ")
+    }
+}
+
+extension Calendar {
+    static var rewardCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "en_US_POSIX")
+        calendar.timeZone = .autoupdatingCurrent
+        calendar.firstWeekday = 2
+        return calendar
+    }
+
+    var rewardRefreshHour: Int { 4 }
+    var bannerRefreshHour: Int { 15 }
+
+    func rewardReferenceDate(for date: Date) -> Date {
+        let refreshStart = self.date(bySettingHour: rewardRefreshHour, minute: 0, second: 0, of: date) ?? date
+        if date < refreshStart {
+            return self.date(byAdding: .day, value: -1, to: date) ?? date
+        }
+        return date
+    }
+
+    func bannerReferenceDate(for date: Date) -> Date {
+        let refreshStart = self.date(bySettingHour: bannerRefreshHour, minute: 0, second: 0, of: date) ?? date
+        if date < refreshStart {
+            return self.date(byAdding: .day, value: -1, to: date) ?? date
+        }
+        return date
+    }
+}
