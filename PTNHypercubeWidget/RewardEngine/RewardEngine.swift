@@ -324,7 +324,7 @@ struct RewardEngine {
             title: RewardSchedule.miniGameTitle,
             slotValue: RewardSchedule.miniGameSlotValue,
             slotCount: RewardSchedule.miniGameTotalSlots,
-            remainingText: RewardSchedule.miniGameRemainingText,
+            remainingText: nil,
             claimedKeys: claimedKeys,
             manualCycleVersions: manualCycleVersions,
             isPremiumPurchased: false,

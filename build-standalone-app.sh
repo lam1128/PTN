@@ -17,6 +17,7 @@ swiftc \
   "$ROOT_DIR/PTNHypercubeWidget/RewardEngine/RewardEngine.swift" \
   "$ROOT_DIR/PTNHypercubeWidget/Storage/AppStateStore.swift" \
   "$ROOT_DIR/PTNHypercubeWidget/Views/MainWidgetView.swift" \
+  "$ROOT_DIR/PTNHypercubeWidget/Views/WidgetSupportViews.swift" \
   "$ROOT_DIR/PTNHypercubeWidget/Views/Sheets.swift" \
   -o "$EXECUTABLE"
 

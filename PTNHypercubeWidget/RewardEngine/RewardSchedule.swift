@@ -292,14 +292,11 @@ enum RewardSchedule {
     static let miniGameTitle = "活动·小游戏"
     static let miniGameSlotValue = RewardValue(crystals: 50)
     static let miniGameTotalSlots = 5
-    static let miniGameRemainingText: String? = nil
 
     static let dataGapManualSourceID = "data-gap-future"
     static let dataGapCurrentSeasonEnd = DayStamp(year: 2026, month: 8, day: 18)
     static let dataGapCurrentSeasonEndHour = 4
     static let dataGapCurrentSeasonEndMinute = 0
-
-    static let referenceNote = "2026-08-13 为暗域第31期第4周，且该周奖励已领取。"
 
     static func eventTrialTitle(for banners: [PullPlanBanner]) -> String {
         let bannerIDSet = Set(banners.map(\.id))

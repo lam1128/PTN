@@ -8,18 +8,17 @@
 
 /* Begin PBXBuildFile section */
 		A00100010000000100000001 /* PTNHypercubeWidgetApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000001 /* PTNHypercubeWidgetApp.swift */; };
-		A00100010000000100000002 /* FloatingWindowConfigurator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000002 /* FloatingWindowConfigurator.swift */; };
 		A00100010000000100000003 /* RewardModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000003 /* RewardModels.swift */; };
 		A00100010000000100000004 /* RewardSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000004 /* RewardSchedule.swift */; };
 		A00100010000000100000005 /* RewardEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000005 /* RewardEngine.swift */; };
 		A00100010000000100000006 /* AppStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000006 /* AppStateStore.swift */; };
 		A00100010000000100000007 /* MainWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000007 /* MainWidgetView.swift */; };
 		A00100010000000100000008 /* Sheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000008 /* Sheets.swift */; };
+		A00100010000000100000009 /* WidgetSupportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020001000000010000000A /* WidgetSupportViews.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A00200010000000100000001 /* PTNHypercubeWidgetApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTNHypercubeWidgetApp.swift; sourceTree = "<group>"; };
-		A00200010000000100000002 /* FloatingWindowConfigurator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingWindowConfigurator.swift; sourceTree = "<group>"; };
 		A00200010000000100000003 /* RewardModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewardModels.swift; sourceTree = "<group>"; };
 		A00200010000000100000004 /* RewardSchedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewardSchedule.swift; sourceTree = "<group>"; };
 		A00200010000000100000005 /* RewardEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewardEngine.swift; sourceTree = "<group>"; };
@@ -27,6 +26,7 @@
 		A00200010000000100000007 /* MainWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWidgetView.swift; sourceTree = "<group>"; };
 		A00200010000000100000008 /* Sheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sheets.swift; sourceTree = "<group>"; };
 		A00200010000000100000009 /* PTNHypercubeWidget.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PTNHypercubeWidget.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A0020001000000010000000A /* WidgetSupportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSupportViews.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -63,7 +63,6 @@
 		A00400010000000100000003 /* App */ = {
 			isa = PBXGroup;
 			children = (
-				A00200010000000100000002 /* FloatingWindowConfigurator.swift */,
 				A00200010000000100000001 /* PTNHypercubeWidgetApp.swift */,
 			);
 			path = App;
@@ -106,6 +105,7 @@
 			isa = PBXGroup;
 			children = (
 				A00200010000000100000007 /* MainWidgetView.swift */,
+				A0020001000000010000000A /* WidgetSupportViews.swift */,
 				A00200010000000100000008 /* Sheets.swift */,
 			);
 			path = Views;
@@ -179,8 +179,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A00100010000000100000002 /* FloatingWindowConfigurator.swift in Sources */,
 				A00100010000000100000007 /* MainWidgetView.swift in Sources */,
+				A00100010000000100000009 /* WidgetSupportViews.swift in Sources */,
 				A00100010000000100000008 /* Sheets.swift in Sources */,
 				A00100010000000100000003 /* RewardModels.swift in Sources */,
 				A00100010000000100000004 /* RewardSchedule.swift in Sources */,

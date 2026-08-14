@@ -81,7 +81,7 @@ final class AppStateStore: ObservableObject {
             slotValue: RewardSchedule.miniGameSlotValue,
             cycleVersion: 0,
             slots: [],
-            remainingText: RewardSchedule.miniGameRemainingText,
+            remainingText: nil,
             isPremiumPurchased: false,
             showsCycleAdvanceButton: true
         )
