@@ -162,6 +162,8 @@ struct ManualUnknownReward: Identifiable, Hashable {
     let claimSource: String
     let claimKey: String
     let cycleVersion: Int
+    let remainingText: String?
+    let showsAdvanceCycleButton: Bool
     let isClaimed: Bool
 }
 
@@ -175,6 +177,7 @@ struct PullPlanBanner: Identifiable, Hashable {
     let endHour: Int
     let endMinute: Int
     let timeZoneIdentifier: String?
+    let endTimeZoneIdentifier: String?
     let characters: [String]
     let selectionKind: PullPlanSelectionKind
 
@@ -185,9 +188,10 @@ struct PullPlanBanner: Identifiable, Hashable {
         end: DayStamp,
         startHour: Int = 15,
         startMinute: Int = 0,
-        endHour: Int = 15,
-        endMinute: Int = 0,
+        endHour: Int = 13,
+        endMinute: Int = 59,
         timeZoneIdentifier: String? = nil,
+        endTimeZoneIdentifier: String? = "Asia/Shanghai",
         characters: [String],
         selectionKind: PullPlanSelectionKind = .none
     ) {
@@ -200,6 +204,7 @@ struct PullPlanBanner: Identifiable, Hashable {
         self.endHour = endHour
         self.endMinute = endMinute
         self.timeZoneIdentifier = timeZoneIdentifier
+        self.endTimeZoneIdentifier = endTimeZoneIdentifier
         self.characters = characters
         self.selectionKind = selectionKind
     }
@@ -234,7 +239,8 @@ struct PullPlanBanner: Identifiable, Hashable {
 
     func endsAt(in calendar: Calendar = .rewardCalendar) -> Date {
         var resolvedCalendar = calendar
-        if let timeZoneIdentifier, let timeZone = TimeZone(identifier: timeZoneIdentifier) {
+        if let timeZoneIdentifier = endTimeZoneIdentifier ?? timeZoneIdentifier,
+           let timeZone = TimeZone(identifier: timeZoneIdentifier) {
             resolvedCalendar.timeZone = timeZone
         }
 
@@ -274,7 +280,8 @@ struct PullPlanBanner: Identifiable, Hashable {
 struct SecretPassSlot: Identifiable, Hashable {
     let id: String
     let index: Int
-    let claimKey: String
+    let baseClaimKey: String
+    let premiumClaimKey: String
     let isClaimed: Bool
 }
 
@@ -285,9 +292,23 @@ struct SecretPassProgress: Hashable {
     let cycleVersion: Int
     let slots: [SecretPassSlot]
     let remainingText: String?
+    let isPremiumPurchased: Bool
+    let showsCycleAdvanceButton: Bool
 
     var claimedCount: Int {
         slots.filter(\.isClaimed).count
+    }
+
+    var isCompleted: Bool {
+        claimedCount == slots.count
+    }
+
+    var displayedClaimedCount: Int {
+        isPremiumPurchased ? claimedCount * 2 : claimedCount
+    }
+
+    var displayedTotalCount: Int {
+        isPremiumPurchased ? slots.count * 2 : slots.count
     }
 }
 

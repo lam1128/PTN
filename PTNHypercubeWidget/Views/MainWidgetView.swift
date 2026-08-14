@@ -60,7 +60,11 @@ struct MainWidgetView: View {
     @State private var activeSheet: ActiveSheet?
     @State private var selectedPrimarySection: PrimarySection = .currentPeriod
     @State private var expandedPullPlanBannerIDs: Set<String> = []
+    @State private var isUpListExpanded = false
+    @State private var currentPeriodScrollOffset: CGFloat = 0
+    @State private var pullPlanScrollOffset: CGFloat = 0
     private let refreshTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+    private let upPopupWidth: CGFloat = 150
 
     var body: some View {
         GeometryReader { geometry in
@@ -96,6 +100,16 @@ struct MainWidgetView: View {
                         )
                     )
 
+                if isUpListExpanded {
+                    Rectangle()
+                        .fill(Color.black.opacity(0.001))
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            isUpListExpanded = false
+                            NSApp.keyWindow?.makeFirstResponder(nil)
+                        }
+                }
+
                 VStack(alignment: .leading, spacing: 0) {
                     VStack(alignment: .leading, spacing: 10) {
                         headerSection
@@ -119,25 +133,31 @@ struct MainWidgetView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 14)
 
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 14) {
-                            primarySectionContent
-
-                            if selectedPrimarySection == .currentPeriod {
-                                manualUnknownSection
+                    Group {
+                        switch selectedPrimarySection {
+                        case .currentPeriod:
+                            ManagedScrollView(scrollOffset: $currentPeriodScrollOffset) {
+                                VStack(alignment: .leading, spacing: 14) {
+                                    currentPeriodSection
+                                    manualUnknownSection
+                                    footerSection
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.top, 14)
+                                .padding(.bottom, 16)
                             }
-
-                            footerSection
+                        case .pullPlan:
+                            ManagedScrollView(scrollOffset: $pullPlanScrollOffset) {
+                                VStack(alignment: .leading, spacing: 14) {
+                                    pullPlanSection
+                                    footerSection
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.top, 14)
+                                .padding(.bottom, 16)
+                            }
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 14)
-                        .padding(.bottom, 16)
                     }
-                    .simultaneousGesture(
-                        TapGesture().onEnded {
-                            NSApp.keyWindow?.makeFirstResponder(nil)
-                        }
-                    )
                 }
                 .blur(radius: activeSheet == nil ? 0 : 2)
                 .opacity(activeSheet == nil ? 1 : 0.28)
@@ -153,6 +173,20 @@ struct MainWidgetView: View {
                     panelView(for: activeSheet)
                         .padding(12)
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                }
+
+            }
+            .coordinateSpace(name: "widgetRoot")
+            .overlayPreferenceValue(UpChevronAnchorPreferenceKey.self) { anchors in
+                GeometryReader { proxy in
+                    if isUpListExpanded, let anchor = anchors.first {
+                        upListPopup
+                            .offset(
+                                x: proxy[anchor].minX - 3,
+                                y: proxy[anchor].minY + 20
+                            )
+                            .zIndex(20)
+                    }
                 }
             }
             .overlay {
@@ -187,10 +221,7 @@ struct MainWidgetView: View {
                         value: store.totalDrawCountFloor.formatted(.number.grouping(.automatic))
                     )
 
-                    summaryMetric(
-                        title: "UP数",
-                        value: "\(store.totalPlannedUpCount)"
-                    )
+                    upSummaryMetric
                 }
 
                 Spacer(minLength: 0)
@@ -245,6 +276,36 @@ struct MainWidgetView: View {
         .frame(minWidth: 58, alignment: .leading)
     }
 
+    private var upSummaryMetric: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("UP数")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(WidgetPalette.titleSecondary)
+
+            HStack(spacing: 2) {
+                Text("\(store.totalPlannedUpCount)")
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .foregroundStyle(WidgetPalette.titlePrimary)
+
+                Button {
+                    isUpListExpanded.toggle()
+                } label: {
+                    Image(systemName: isUpListExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(WidgetPalette.accentSoft)
+                        .frame(width: 16, height: 16)
+                        .anchorPreference(
+                            key: UpChevronAnchorPreferenceKey.self,
+                            value: .bounds
+                        ) { [$0] }
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            }
+        }
+        .frame(minWidth: 58, alignment: .leading)
+    }
+
     private var primarySectionTabs: some View {
         HStack(spacing: 8) {
             primaryTabButton(.currentPeriod, title: "当前周期")
@@ -264,14 +325,16 @@ struct MainWidgetView: View {
     }
 
     private var currentPeriodSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if store.currentRewards.isEmpty {
+        let visibleRewards = store.currentRewards.filter { $0.category != .eventTrial }
+
+        return VStack(alignment: .leading, spacing: 10) {
+            if visibleRewards.isEmpty {
                 Text("今天没有可显示的周期项")
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             } else {
-                ForEach(store.currentRewards) { reward in
+                ForEach(visibleRewards) { reward in
                     RewardRowView(reward: reward) {
                         store.toggle(reward)
                     }
@@ -281,10 +344,35 @@ struct MainWidgetView: View {
     }
 
     private var manualUnknownSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("时间未知，手动记录")
+        let trialRewards = store.currentRewards
+            .filter { $0.category == .eventTrial }
+            .sorted { lhs, rhs in
+                if lhs.isClaimed != rhs.isClaimed {
+                    return !lhs.isClaimed && rhs.isClaimed
+                }
+                return lhs.sortOrder < rhs.sortOrder
+            }
+        let incompleteTrialRewards = trialRewards.filter { !$0.isClaimed }
+        let completedTrialRewards = trialRewards.filter(\.isClaimed)
 
-            ForEach(store.manualUnknownRewards) { reward in
+        let incompleteManualUnknownRewards = store.manualUnknownRewards.filter { !$0.isClaimed }
+        let completedManualUnknownRewards = store.manualUnknownRewards.filter(\.isClaimed)
+
+        let incompleteProgressItems = [store.secretPassProgress, store.miniGameProgress]
+            .filter { !$0.isCompleted }
+        let completedProgressItems = [store.secretPassProgress, store.miniGameProgress]
+            .filter(\.isCompleted)
+
+        return VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("额外记录")
+
+            ForEach(incompleteTrialRewards) { reward in
+                RewardRowView(reward: reward) {
+                    store.toggle(reward)
+                }
+            }
+
+            ForEach(incompleteManualUnknownRewards) { reward in
                 ManualUnknownRewardRowView(
                     reward: reward,
                     onClaim: { store.toggleManualUnknown(reward) },
@@ -292,18 +380,29 @@ struct MainWidgetView: View {
                 )
             }
 
-            SecretPassProgressView(
-                progress: store.secretPassProgress,
-                onTapSlot: { slot in store.toggleSecretPassSlot(slot) },
-                onAdvanceCycle: { store.advanceManualCycle(for: RewardSchedule.secretPassID) }
-            )
+            ForEach(incompleteProgressItems, id: \.id) { progress in
+                manualProgressView(for: progress)
+            }
 
-            SecretPassProgressView(
-                progress: store.miniGameProgress,
-                onTapSlot: { slot in store.toggleMiniGameSlot(slot) },
-                onAdvanceCycle: { store.advanceManualCycle(for: RewardSchedule.miniGameID) }
-            )
+            ForEach(completedTrialRewards) { reward in
+                RewardRowView(reward: reward) {
+                    store.toggle(reward)
+                }
+            }
+
+            ForEach(completedManualUnknownRewards) { reward in
+                ManualUnknownRewardRowView(
+                    reward: reward,
+                    onClaim: { store.toggleManualUnknown(reward) },
+                    onAdvanceCycle: { store.advanceManualCycle(for: reward.id) }
+                )
+            }
+
+            ForEach(completedProgressItems, id: \.id) { progress in
+                manualProgressView(for: progress)
+            }
         }
+        .padding(.horizontal, 4)
     }
 
     private var pullPlanSection: some View {
@@ -382,6 +481,132 @@ struct MainWidgetView: View {
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 15, weight: .semibold, design: .rounded))
+    }
+
+    private func manualProgressView(for progress: SecretPassProgress) -> some View {
+        SecretPassProgressView(
+            progress: progress,
+            onTapSlot: { slot in
+                if progress.id == RewardSchedule.secretPassID {
+                    store.toggleSecretPassSlot(slot)
+                } else {
+                    store.toggleMiniGameSlot(slot)
+                }
+            },
+            onTogglePremiumPurchased: progress.id == RewardSchedule.secretPassID
+                ? { isOn in store.setHasPremiumSecretPass(isOn) }
+                : nil,
+            onAdvanceCycle: progress.id == RewardSchedule.miniGameID
+                ? { store.advanceManualCycle(for: RewardSchedule.miniGameID) }
+                : nil
+        )
+    }
+
+    private var upListEntries: [UpListEntry] {
+        let currentDate = Date()
+
+        return RewardSchedule.pullPlanBanners
+            .sorted { lhs, rhs in
+                let lhsStart = lhs.startsAt()
+                let rhsStart = rhs.startsAt()
+                if lhsStart != rhsStart {
+                    return lhsStart < rhsStart
+                }
+                return lhs.id < rhs.id
+            }
+            .compactMap { banner in
+                let progress = store.pullPlanBannerProgress(for: banner.id, allowCompleted: banner.isActive(at: currentDate))
+                guard progress == .planned else { return nil }
+
+                switch banner.selectionKind {
+                case .none:
+                    return UpListEntry(
+                        id: banner.id,
+                        title: banner.title,
+                        detail: banner.characters.first ?? "未命名"
+                    )
+                case .targetChoice:
+                    return UpListEntry(
+                        id: banner.id,
+                        title: banner.title,
+                        detail: store.selectedPullPlanUpChoices[banner.id] ?? banner.characters.joined(separator: " / ")
+                    )
+                case .lockCount:
+                    guard let lockLevel = store.selectedPullPlanLockChoices[banner.id] else { return nil }
+                    return UpListEntry(
+                        id: banner.id,
+                        title: banner.title,
+                        detail: "\(banner.characters.first ?? "未命名") ×\(lockLevel + 1)"
+                    )
+                }
+            }
+    }
+
+    private var upListPopup: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if upListEntries.isEmpty {
+                Text("当前没有UP记录")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(WidgetPalette.accentSoft)
+            } else {
+                ForEach(upListEntries) { entry in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(entry.title)
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(WidgetPalette.titlePrimary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+
+                        Text(entry.detail)
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundStyle(WidgetPalette.titleSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.44),
+                                        Color(red: 0.93, green: 0.96, blue: 1.00).opacity(0.16)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.46), lineWidth: 1)
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .frame(width: upPopupWidth, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.98),
+                            Color(red: 0.95, green: 0.98, blue: 1.0).opacity(0.95),
+                            Color(red: 0.94, green: 0.96, blue: 0.99).opacity(0.92)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.70), lineWidth: 1)
+        }
+        .shadow(color: WidgetPalette.accentSoft.opacity(0.12), radius: 12, y: 5)
     }
 
     private func primaryTabButton(_ section: PrimarySection, title: String) -> some View {
@@ -511,6 +736,12 @@ private struct ManualUnknownRewardRowView: View {
 
                     Spacer(minLength: 0)
 
+                    if let remainingText = reward.remainingText {
+                        Text(remainingText)
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundStyle(reward.isClaimed ? WidgetPalette.claimed : WidgetPalette.accentSoft)
+                    }
+
                     Text(reward.value.inlineDescription(withPlusSign: true))
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .foregroundStyle(reward.isClaimed ? WidgetPalette.claimed : WidgetPalette.accent)
@@ -518,22 +749,25 @@ private struct ManualUnknownRewardRowView: View {
 
             }
 
-            Button(action: onAdvanceCycle) {
-                Image(systemName: "arrow.clockwise.circle")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(WidgetPalette.claimed)
+            if reward.showsAdvanceCycleButton {
+                Button(action: onAdvanceCycle) {
+                    Image(systemName: "arrow.clockwise.circle")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(WidgetPalette.claimed)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
         .padding(11)
-            .widgetRoundedCard(fill: Color.white.opacity(0.16))
-        }
+        .widgetRoundedCard(fill: Color.white.opacity(0.16))
+    }
 }
 
 private struct SecretPassProgressView: View {
     let progress: SecretPassProgress
     let onTapSlot: (SecretPassSlot) -> Void
-    let onAdvanceCycle: () -> Void
+    let onTogglePremiumPurchased: ((Bool) -> Void)?
+    let onAdvanceCycle: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -544,6 +778,35 @@ private struct SecretPassProgressView: View {
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
                             .foregroundStyle(WidgetPalette.titlePrimary)
 
+                        if let onTogglePremiumPurchased {
+                            Button {
+                                onTogglePremiumPurchased(!progress.isPremiumPurchased)
+                            } label: {
+                                Text(progress.isPremiumPurchased ? "高级已购" : "高级")
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .foregroundStyle(
+                                        progress.isPremiumPurchased
+                                            ? Color(red: 0.82, green: 0.30, blue: 0.53)
+                                            : WidgetPalette.accentSoft
+                                    )
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        Capsule(style: .continuous)
+                                            .fill(
+                                                progress.isPremiumPurchased
+                                                    ? Color.white.opacity(0.28)
+                                                    : Color.white.opacity(0.20)
+                                            )
+                                    )
+                                    .overlay {
+                                        Capsule(style: .continuous)
+                                            .strokeBorder(Color.white.opacity(progress.isPremiumPurchased ? 0.0 : 0.28), lineWidth: 1)
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                        }
+
                         Spacer(minLength: 0)
 
                         if let remainingText = progress.remainingText {
@@ -552,19 +815,21 @@ private struct SecretPassProgressView: View {
                                 .foregroundStyle(WidgetPalette.accentSoft)
                         }
 
-                        Text("\(progress.claimedCount)/\(progress.slots.count)")
+                        Text("\(progress.displayedClaimedCount)/\(progress.displayedTotalCount)")
                             .font(.system(size: 12, weight: .bold, design: .rounded))
                             .foregroundStyle(WidgetPalette.accent)
                     }
 
                 }
 
-                Button(action: onAdvanceCycle) {
-                    Image(systemName: "arrow.clockwise.circle")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(WidgetPalette.claimed)
+                if progress.showsCycleAdvanceButton, let onAdvanceCycle {
+                    Button(action: onAdvanceCycle) {
+                        Image(systemName: "arrow.clockwise.circle")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(WidgetPalette.claimed)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
 
             HStack(spacing: 10) {
@@ -650,9 +915,11 @@ private struct PullPlanBannerCardView: View {
                     }
 
                     HStack(alignment: .center, spacing: 8) {
-                        Text(banner.localDisplayRange())
+                        Text(multilineDisplayRange)
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundStyle(Color(red: 0.54, green: 0.31, blue: 0.40))
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         Spacer(minLength: 0)
 
@@ -758,6 +1025,11 @@ private struct PullPlanBannerCardView: View {
 
         let days = Int(interval / 86_400)
         return "\(days)天"
+    }
+
+    private var multilineDisplayRange: String {
+        let range = banner.localDisplayRange()
+        return range.replacingOccurrences(of: " - ", with: " -\n")
     }
 
     @ViewBuilder
@@ -879,7 +1151,7 @@ private struct PullPlanPityField: View {
     let onSetValue: (Int?) -> Void
 
     @State private var text: String = ""
-    @FocusState private var isFocused: Bool
+    @State private var isFocused = false
 
     var body: some View {
         HStack(spacing: 5) {
@@ -888,16 +1160,14 @@ private struct PullPlanPityField: View {
                 .foregroundStyle(Color(red: 0.54, green: 0.31, blue: 0.40))
 
             ZStack {
-                if isFocused {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.white.opacity(0.20))
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(isFocused ? Color.white.opacity(0.20) : Color.clear)
 
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color(red: 0.82, green: 0.56, blue: 0.67).opacity(0.72), lineWidth: 1)
-                } else {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color(red: 0.78, green: 0.56, blue: 0.66).opacity(0.34), lineWidth: 1)
-                }
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(
+                        Color(red: 0.82, green: 0.56, blue: 0.67).opacity(isFocused ? 0.72 : 0.34),
+                        lineWidth: 1
+                    )
 
                 if text.isEmpty && !isFocused {
                     Text("0")
@@ -905,18 +1175,21 @@ private struct PullPlanPityField: View {
                         .foregroundStyle(Color(red: 0.54, green: 0.31, blue: 0.40).opacity(0.78))
                 }
 
-                TextField("", text: editingText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.46, green: 0.17, blue: 0.29))
-                    .multilineTextAlignment(.center)
-                    .focused($isFocused)
-                    .onSubmit {
-                        commitText()
-                        isFocused = false
-                    }
+                InlineNumericTextField(
+                    text: editingText,
+                    isFocused: $isFocused,
+                    textColor: NSColor(
+                        red: 0.46,
+                        green: 0.17,
+                        blue: 0.29,
+                        alpha: 1
+                    ),
+                    font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                    onCommit: commitText
+                )
+                .padding(.horizontal, 4)
             }
-            .frame(width: 34, height: 24)
+            .frame(width: 38, height: 26)
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .onTapGesture {
                 isFocused = true
@@ -961,6 +1234,237 @@ private struct PullPlanPityField: View {
             text = committedText
         }
         onSetValue(committedText.isEmpty ? nil : Int(committedText))
+    }
+}
+
+private struct InlineNumericTextField: NSViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    let textColor: NSColor
+    let font: NSFont
+    let onCommit: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            text: $text,
+            isFocused: $isFocused,
+            onCommit: onCommit
+        )
+    }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let textField = ClearBackgroundTextField()
+        textField.delegate = context.coordinator
+        textField.isBezeled = false
+        textField.isBordered = false
+        textField.drawsBackground = false
+        textField.backgroundColor = .clear
+        textField.focusRingType = .none
+        textField.alignment = .center
+        textField.font = font
+        textField.textColor = textColor
+        textField.placeholderString = ""
+        textField.lineBreakMode = .byClipping
+        textField.maximumNumberOfLines = 1
+        textField.cell?.wraps = false
+        textField.cell?.isScrollable = true
+        textField.stringValue = text
+        return textField
+    }
+
+    func updateNSView(_ textField: NSTextField, context: Context) {
+        if textField.stringValue != text {
+            textField.stringValue = text
+        }
+
+        textField.font = font
+        textField.textColor = textColor
+
+        DispatchQueue.main.async {
+            guard textField.window != nil else { return }
+
+            if isFocused {
+                if textField.window?.firstResponder !== textField.currentEditor() {
+                    textField.window?.makeFirstResponder(textField)
+                }
+            } else if textField.window?.firstResponder === textField.currentEditor() {
+                textField.window?.makeFirstResponder(nil)
+            }
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        @Binding private var text: String
+        @Binding private var isFocused: Bool
+        private let onCommit: () -> Void
+
+        init(
+            text: Binding<String>,
+            isFocused: Binding<Bool>,
+            onCommit: @escaping () -> Void
+        ) {
+            self._text = text
+            self._isFocused = isFocused
+            self.onCommit = onCommit
+        }
+
+        func controlTextDidBeginEditing(_ obj: Notification) {
+            isFocused = true
+        }
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard let textField = obj.object as? NSTextField else { return }
+            text = String(textField.stringValue.filter(\.isNumber).prefix(3))
+            if textField.stringValue != text {
+                textField.stringValue = text
+            }
+        }
+
+        func controlTextDidEndEditing(_ obj: Notification) {
+            isFocused = false
+            onCommit()
+        }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                control.window?.makeFirstResponder(nil)
+                return true
+            }
+            return false
+        }
+    }
+}
+
+private final class ClearBackgroundTextField: NSTextField {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        currentEditor()?.drawsBackground = false
+        currentEditor()?.backgroundColor = .clear
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let becameFirstResponder = super.becomeFirstResponder()
+        currentEditor()?.drawsBackground = false
+        currentEditor()?.backgroundColor = .clear
+        return becameFirstResponder
+    }
+}
+
+private struct UpListEntry: Identifiable {
+    let id: String
+    let title: String
+    let detail: String
+}
+
+private struct UpChevronAnchorPreferenceKey: PreferenceKey {
+    static var defaultValue: [Anchor<CGRect>] = []
+
+    static func reduce(value: inout [Anchor<CGRect>], nextValue: () -> [Anchor<CGRect>]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+private struct ManagedScrollView<Content: View>: NSViewRepresentable {
+    @Binding var scrollOffset: CGFloat
+    @ViewBuilder let content: Content
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(scrollOffset: $scrollOffset)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        scrollView.contentView.postsBoundsChangedNotifications = true
+
+        let hostingView = NSHostingView(rootView: content)
+        hostingView.translatesAutoresizingMaskIntoConstraints = true
+        hostingView.autoresizingMask = [.width]
+        hostingView.frame = NSRect(x: 0, y: 0, width: scrollView.contentSize.width, height: 1)
+
+        scrollView.documentView = hostingView
+        context.coordinator.attach(to: scrollView, hostingView: hostingView)
+        context.coordinator.updateLayout()
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        context.coordinator.hostingView?.rootView = content
+        context.coordinator.updateLayout()
+        context.coordinator.restoreScrollPositionIfNeeded()
+    }
+
+    final class Coordinator: NSObject {
+        @Binding private var scrollOffset: CGFloat
+        weak var scrollView: NSScrollView?
+        weak var hostingView: NSHostingView<Content>?
+        private var boundsObserver: NSObjectProtocol?
+        private var isRestoringScrollPosition = false
+
+        init(scrollOffset: Binding<CGFloat>) {
+            self._scrollOffset = scrollOffset
+        }
+
+        deinit {
+            if let boundsObserver {
+                NotificationCenter.default.removeObserver(boundsObserver)
+            }
+        }
+
+        func attach(to scrollView: NSScrollView, hostingView: NSHostingView<Content>) {
+            self.scrollView = scrollView
+            self.hostingView = hostingView
+
+            boundsObserver = NotificationCenter.default.addObserver(
+                forName: NSView.boundsDidChangeNotification,
+                object: scrollView.contentView,
+                queue: .main
+            ) { [weak self] _ in
+                guard let self, !self.isRestoringScrollPosition else { return }
+                self.scrollOffset = scrollView.contentView.bounds.origin.y
+                NSApp.keyWindow?.makeFirstResponder(nil)
+            }
+        }
+
+        func updateLayout() {
+            guard let scrollView, let hostingView else { return }
+
+            let targetWidth = max(scrollView.contentSize.width, 1)
+            if abs(hostingView.frame.width - targetWidth) > 0.5 {
+                hostingView.frame.size.width = targetWidth
+            }
+
+            hostingView.layoutSubtreeIfNeeded()
+            let fittingHeight = max(hostingView.fittingSize.height, 1)
+            if abs(hostingView.frame.height - fittingHeight) > 0.5 {
+                hostingView.frame.size.height = fittingHeight
+            }
+        }
+
+        func restoreScrollPositionIfNeeded() {
+            guard let scrollView else { return }
+
+            DispatchQueue.main.async { [weak self, weak scrollView] in
+                guard let self, let scrollView else { return }
+                let maxOffset = max(
+                    0,
+                    (scrollView.documentView?.frame.height ?? 0) - scrollView.contentView.bounds.height
+                )
+                let clampedOffset = min(max(self.scrollOffset, 0), maxOffset)
+                let currentOffset = scrollView.contentView.bounds.origin.y
+
+                guard abs(currentOffset - clampedOffset) > 0.5 else { return }
+
+                self.isRestoringScrollPosition = true
+                scrollView.contentView.scroll(to: NSPoint(x: 0, y: clampedOffset))
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+                self.isRestoringScrollPosition = false
+            }
+        }
     }
 }
 

@@ -13,7 +13,8 @@ struct RewardEngine {
     func snapshot(
         on currentDate: Date,
         claimedKeys: Set<String>,
-        manualCycleVersions: [String: Int]
+        manualCycleVersions: [String: Int],
+        hasPremiumSecretPass: Bool
     ) -> RewardSnapshot {
         let today = DayStamp.rewardDay(from: currentDate, calendar: calendar)
         var rewards: [RewardItem] = []
@@ -36,13 +37,16 @@ struct RewardEngine {
             currentRewards: sortCurrentRewards(rewards),
             manualUnknownRewards: sortManualUnknownRewards(
                 makeManualUnknownRewards(
+                    now: currentDate,
                     claimedKeys: claimedKeys,
                     manualCycleVersions: manualCycleVersions
                 )
             ),
             secretPassProgress: makeSecretPassProgress(
+                now: currentDate,
                 claimedKeys: claimedKeys,
-                manualCycleVersions: manualCycleVersions
+                manualCycleVersions: manualCycleVersions,
+                hasPremiumSecretPass: hasPremiumSecretPass
             ),
             miniGameProgress: makeMiniGameProgress(
                 claimedKeys: claimedKeys,
@@ -253,12 +257,13 @@ struct RewardEngine {
     }
 
     private func makeManualUnknownRewards(
+        now: Date,
         claimedKeys: Set<String>,
         manualCycleVersions: [String: Int]
     ) -> [ManualUnknownReward] {
         RewardSchedule.manualUnknownSources.map { source in
             let version = manualCycleVersions[source.id] ?? 0
-            let claimKey = "\(source.id)-manual-v\(version)"
+            let claimKey = manualUnknownClaimKey(for: source.id, version: version, now: now)
             return ManualUnknownReward(
                 id: source.id,
                 title: source.title,
@@ -266,23 +271,47 @@ struct RewardEngine {
                 claimSource: source.title,
                 claimKey: claimKey,
                 cycleVersion: version,
+                remainingText: manualUnknownRemainingText(for: source.id, now: now),
+                showsAdvanceCycleButton: source.showsAdvanceCycleButton,
                 isClaimed: claimedKeys.contains(claimKey)
             )
         }
     }
 
+    private func manualUnknownClaimKey(for sourceID: String, version: Int, now: Date) -> String {
+        if sourceID == "emotion-random" {
+            return "\(sourceID)-\(monthStart(for: DayStamp.rewardDay(from: now, calendar: calendar)).key)"
+        }
+        return "\(sourceID)-manual-v\(version)"
+    }
+
     private func makeSecretPassProgress(
+        now: Date,
         claimedKeys: Set<String>,
-        manualCycleVersions: [String: Int]
+        manualCycleVersions: [String: Int],
+        hasPremiumSecretPass: Bool
     ) -> SecretPassProgress {
         makeProgress(
             id: RewardSchedule.secretPassID,
             title: RewardSchedule.secretPassTitle,
-            slotValue: RewardSchedule.secretPassSlotValue,
+            slotValue: hasPremiumSecretPass
+                ? RewardValue(blueTickets: RewardSchedule.secretPassSlotValue.blueTickets * 2)
+                : RewardSchedule.secretPassSlotValue,
             slotCount: RewardSchedule.secretPassTotalSlots,
-            remainingText: RewardSchedule.secretPassRemainingText,
+            remainingText: remainingText(
+                until: preciseDate(
+                    day: RewardSchedule.secretPassSeasonEnd,
+                    hour: RewardSchedule.secretPassSeasonEndHour,
+                    minute: RewardSchedule.secretPassSeasonEndMinute,
+                    timeZoneIdentifier: RewardSchedule.secretPassSeasonTimeZoneIdentifier
+                ),
+                now: now,
+                hourSuffix: "小时"
+            ),
             claimedKeys: claimedKeys,
-            manualCycleVersions: manualCycleVersions
+            manualCycleVersions: manualCycleVersions,
+            isPremiumPurchased: hasPremiumSecretPass,
+            showsCycleAdvanceButton: false
         )
     }
 
@@ -297,7 +326,9 @@ struct RewardEngine {
             slotCount: RewardSchedule.miniGameTotalSlots,
             remainingText: RewardSchedule.miniGameRemainingText,
             claimedKeys: claimedKeys,
-            manualCycleVersions: manualCycleVersions
+            manualCycleVersions: manualCycleVersions,
+            isPremiumPurchased: false,
+            showsCycleAdvanceButton: true
         )
     }
 
@@ -308,16 +339,20 @@ struct RewardEngine {
         slotCount: Int,
         remainingText: String?,
         claimedKeys: Set<String>,
-        manualCycleVersions: [String: Int]
+        manualCycleVersions: [String: Int],
+        isPremiumPurchased: Bool,
+        showsCycleAdvanceButton: Bool
     ) -> SecretPassProgress {
         let version = manualCycleVersions[id] ?? 0
         let slots = (1...slotCount).map { index in
-            let claimKey = "\(id)-v\(version)-slot-\(index)"
+            let baseClaimKey = "\(id)-v\(version)-slot-\(index)"
+            let premiumClaimKey = "\(id)-v\(version)-slot-\(index)-premium"
             return SecretPassSlot(
-                id: claimKey,
+                id: baseClaimKey,
                 index: index,
-                claimKey: claimKey,
-                isClaimed: claimedKeys.contains(claimKey)
+                baseClaimKey: baseClaimKey,
+                premiumClaimKey: premiumClaimKey,
+                isClaimed: claimedKeys.contains(baseClaimKey)
             )
         }
 
@@ -327,8 +362,63 @@ struct RewardEngine {
             slotValue: slotValue,
             cycleVersion: version,
             slots: slots,
-            remainingText: remainingText
+            remainingText: remainingText,
+            isPremiumPurchased: isPremiumPurchased,
+            showsCycleAdvanceButton: showsCycleAdvanceButton
         )
+    }
+
+    private func manualUnknownRemainingText(for sourceID: String, now: Date) -> String? {
+        guard sourceID == RewardSchedule.dataGapManualSourceID else { return nil }
+        return remainingText(
+            until: preciseDate(
+                day: RewardSchedule.dataGapCurrentSeasonEnd,
+                hour: RewardSchedule.dataGapCurrentSeasonEndHour,
+                minute: RewardSchedule.dataGapCurrentSeasonEndMinute
+            ),
+            now: now,
+            hourSuffix: "时"
+        )
+    }
+
+    private func preciseDate(
+        day: DayStamp,
+        hour: Int,
+        minute: Int,
+        timeZoneIdentifier: String? = nil
+    ) -> Date {
+        var resolvedCalendar = calendar
+        if let timeZoneIdentifier, let timeZone = TimeZone(identifier: timeZoneIdentifier) {
+            resolvedCalendar.timeZone = timeZone
+        }
+
+        var components = DateComponents()
+        components.year = day.year
+        components.month = day.month
+        components.day = day.day
+        components.hour = hour
+        components.minute = minute
+        components.second = 0
+        return resolvedCalendar.date(from: components) ?? day.date(in: resolvedCalendar)
+    }
+
+    private func remainingText(
+        until targetDate: Date,
+        now: Date,
+        hourSuffix: String
+    ) -> String? {
+        let interval = Int(max(0, targetDate.timeIntervalSince(now)))
+        guard interval > 0 else { return nil }
+
+        let days = interval / 86_400
+        let hours = (interval % 86_400) / 3_600
+
+        if days > 0 {
+            return "\(days)天\(hours)\(hourSuffix)"
+        }
+
+        let minutes = (interval % 3_600) / 60
+        return String(format: "%02d:%02d", hours, minutes)
     }
 
     private func sortCurrentRewards(_ rewards: [RewardItem]) -> [RewardItem] {

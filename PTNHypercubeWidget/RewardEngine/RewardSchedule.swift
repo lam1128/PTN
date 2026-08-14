@@ -12,6 +12,19 @@ struct ManualUnknownSourceDefinition: Identifiable, Hashable {
     let id: String
     let title: String
     let value: RewardValue
+    let showsAdvanceCycleButton: Bool
+
+    init(
+        id: String,
+        title: String,
+        value: RewardValue,
+        showsAdvanceCycleButton: Bool = true
+    ) {
+        self.id = id
+        self.title = title
+        self.value = value
+        self.showsAdvanceCycleButton = showsAdvanceCycleButton
+    }
 }
 
 struct TimedMonthlySource: Identifiable, Hashable {
@@ -86,12 +99,14 @@ enum RewardSchedule {
         ManualUnknownSourceDefinition(
             id: "emotion-random",
             title: "情绪检测·随机一天",
-            value: RewardValue(blueTickets: 1)
+            value: RewardValue(blueTickets: 1),
+            showsAdvanceCycleButton: false
         ),
         ManualUnknownSourceDefinition(
             id: "data-gap-future",
             title: "数据间隙·第8赛季下",
-            value: RewardValue(crystals: 1260)
+            value: RewardValue(crystals: 1260),
+            showsAdvanceCycleButton: false
         )
     ]
 
@@ -144,6 +159,7 @@ enum RewardSchedule {
             endHour: 13,
             endMinute: 59,
             timeZoneIdentifier: "Asia/Shanghai",
+            endTimeZoneIdentifier: "Asia/Shanghai",
             characters: ["Eve", "Bianca"],
             selectionKind: .targetChoice
         ),
@@ -267,13 +283,21 @@ enum RewardSchedule {
     static let secretPassTitle = "监察密令·渡鸦"
     static let secretPassSlotValue = RewardValue(blueTickets: 1)
     static let secretPassTotalSlots = 6
-    static let secretPassRemainingText = "31天16小时"
+    static let secretPassSeasonEnd = DayStamp(year: 2026, month: 9, day: 14)
+    static let secretPassSeasonEndHour = 4
+    static let secretPassSeasonEndMinute = 59
+    static let secretPassSeasonTimeZoneIdentifier = "Asia/Shanghai"
 
     static let miniGameID = "event-mini-game"
     static let miniGameTitle = "活动·小游戏"
     static let miniGameSlotValue = RewardValue(crystals: 50)
     static let miniGameTotalSlots = 5
     static let miniGameRemainingText: String? = nil
+
+    static let dataGapManualSourceID = "data-gap-future"
+    static let dataGapCurrentSeasonEnd = DayStamp(year: 2026, month: 8, day: 18)
+    static let dataGapCurrentSeasonEndHour = 4
+    static let dataGapCurrentSeasonEndMinute = 0
 
     static let referenceNote = "2026-08-13 为暗域第31期第4周，且该周奖励已领取。"
 
