@@ -10,7 +10,7 @@
 
 ## 新增奖励模块
 
-1. 先在 `RewardSchedule.swift` 增加唯一 ID、标题、奖励值和时间配置。
+1. 先在 `RewardSchedule.swift` 增加 `RewardSourceDefinition` 或专用定义的唯一 ID、标题、奖励值和时间配置。
 2. 多圆点模块使用 `ProgressModuleDefinition`，同时填写 `kind`、`slotCount`、`slotValue` 和刷新能力。
 3. 在 `RewardEngine.swift` 增加一个生成方法，统一通过 `makeProgress` 生成圆点和领取键。
 4. 在 `AppStateStore.swift` 增加领取/取消动作；可复用 `toggleStandardProgressSlot`，不要复制库存和历史逻辑。
@@ -19,6 +19,8 @@
 
 ## 必须保持
 
+- 开始修改前先搜索并复用已有模型、配置、共享 View、调色板和存储动作；只有现有代码无法表达需求时才新增实现。
+- 不要为同一规则新增第二套 ID、颜色、领取逻辑或日期计算；优先扩展已有定义和共享方法。
 - 不改已有存档键、领取键和历史来源格式，除非同时提供迁移逻辑。
 - 当前模块顺序固定，领取后不沉底；不要按 `isClaimed` 重新排序。
 - UI 尺寸、圆圈、颜色和弹窗位置视为锁定内容，除非用户明确要求修改。

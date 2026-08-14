@@ -336,3 +336,19 @@
 - 结果：新增项目级 `AGENTS.md`，明确新增模块步骤、UI 锁定边界和验证命令。
 - 结果：`git diff --check` 和 `./build-standalone-app.sh` 均通过。
 - 未解决：无已知代码问题。
+
+### 2026-08-14 手动更新按钮颜色统一
+
+- 范围：常驻奖励、监察密令和活动小游戏的手动更新按钮。
+- 结果：抽取共享 `ManualResetButton`，统一使用未完成态的 `WidgetPalette.accent` 颜色，保持尺寸和位置不变。
+- 结果：`git diff --check` 和 `./build-standalone-app.sh` 均通过。
+- 未解决：无已知代码问题。
+
+### 2026-08-14 统一配置与颜色审计
+
+- 范围：抽卡规划颜色引用、设置页颜色引用和日/周/月标准奖励配置。
+- 结果：重复颜色统一从 `WidgetPalette` 读取，手动更新按钮继续共用 `ManualResetButton`。
+- 结果：日、周、月标准奖励统一使用 `RewardSourceDefinition`，不再使用匿名 tuple。
+- 结果：未改变现有颜色值、布局、奖励数值、领取键或页面顺序。
+- 结果：`git diff --check` 和 `./build-standalone-app.sh` 均通过。
+- 未解决：无已知代码问题。

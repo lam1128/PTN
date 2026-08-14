@@ -114,7 +114,7 @@ struct HistorySheetView: View {
                         store.undoLatestHistoryEntry()
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color(red: 0.87, green: 0.31, blue: 0.55))
+                    .tint(WidgetPalette.pink)
                 }
 
                 ScrollView(.vertical, showsIndicators: true) {

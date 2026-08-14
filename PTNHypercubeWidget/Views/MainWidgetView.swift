@@ -1,13 +1,14 @@
 import AppKit
 import SwiftUI
 
-private enum WidgetPalette {
+enum WidgetPalette {
     static let titlePrimary = Color(red: 0.34, green: 0.15, blue: 0.22)
     static let titleSecondary = Color(red: 0.44, green: 0.21, blue: 0.30)
     static let accent = Color(red: 0.46, green: 0.17, blue: 0.29)
     static let accentSoft = Color(red: 0.50, green: 0.24, blue: 0.35)
     static let accentMuted = Color(red: 0.52, green: 0.26, blue: 0.36)
     static let accentLight = Color(red: 0.56, green: 0.35, blue: 0.43)
+    static let mutedText = Color(red: 0.54, green: 0.31, blue: 0.40)
     static let claimed = Color(red: 0.58, green: 0.36, blue: 0.43)
     static let pink = Color(red: 0.87, green: 0.31, blue: 0.55)
     static let pinkStrong = Color(red: 0.82, green: 0.30, blue: 0.53)
@@ -22,6 +23,7 @@ private enum WidgetPalette {
     static let overlayStroke = Color.white.opacity(0.44)
     static let cardStroke = Color.white.opacity(0.34)
     static let capsuleStroke = Color.white.opacity(0.30)
+    static let pityBorder = Color(red: 0.82, green: 0.56, blue: 0.67)
 }
 
 private extension View {
@@ -506,7 +508,7 @@ struct MainWidgetView: View {
             if let todayTotal = store.todayCrystalEquivalentText {
                 Text("今日：\(todayTotal)")
                     .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color(red: 0.50, green: 0.24, blue: 0.35))
+                    .foregroundStyle(WidgetPalette.accentSoft)
             }
         }
         .padding(.top, 2)
@@ -791,12 +793,7 @@ private struct ManualUnknownRewardRowView: View {
             }
 
             if reward.showsAdvanceCycleButton {
-                Button(action: onAdvanceCycle) {
-                    Image(systemName: "arrow.clockwise.circle")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(WidgetPalette.claimed)
-                }
-                .buttonStyle(.plain)
+                ManualResetButton(action: onAdvanceCycle)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -836,7 +833,7 @@ private struct SecretPassProgressView: View {
                                         progress.isCompleted
                                             ? WidgetPalette.claimed
                                             : progress.isPremiumPurchased
-                                            ? Color(red: 0.82, green: 0.30, blue: 0.53)
+                                            ? WidgetPalette.pinkStrong
                                             : WidgetPalette.accentSoft
                                     )
                                     .padding(.horizontal, 7)
@@ -881,12 +878,7 @@ private struct SecretPassProgressView: View {
                 }
 
                 if progress.showsCycleAdvanceButton, let onAdvanceCycle {
-                    Button(action: onAdvanceCycle) {
-                        Image(systemName: "arrow.clockwise.circle")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(WidgetPalette.accent)
-                    }
-                    .buttonStyle(.plain)
+                    ManualResetButton(action: onAdvanceCycle)
                 }
             }
 
@@ -915,6 +907,19 @@ private struct SecretPassProgressView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(11)
         .widgetRoundedCard(fill: Color.white.opacity(0.16))
+    }
+}
+
+private struct ManualResetButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "arrow.clockwise.circle")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(WidgetPalette.accent)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -1097,7 +1102,7 @@ private struct PullPlanBannerCardView: View {
                             Button(action: onToggleExpand) {
                                 Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                                     .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(Color(red: 0.52, green: 0.26, blue: 0.36))
+                                    .foregroundStyle(WidgetPalette.accentMuted)
                                     .frame(width: 18, height: 18)
                             }
                             .buttonStyle(.plain)
@@ -1111,7 +1116,7 @@ private struct PullPlanBannerCardView: View {
                     HStack(alignment: .center, spacing: 8) {
                         Text(multilineDisplayRange)
                             .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .foregroundStyle(Color(red: 0.54, green: 0.31, blue: 0.40))
+                            .foregroundStyle(WidgetPalette.mutedText)
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
 
@@ -1121,7 +1126,7 @@ private struct PullPlanBannerCardView: View {
 
                         Text(countdownText)
                             .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .foregroundStyle(Color(red: 0.54, green: 0.31, blue: 0.40))
+                            .foregroundStyle(WidgetPalette.mutedText)
                             .frame(width: 34, alignment: .trailing)
                             .padding(.trailing, 4)
                     }
@@ -1153,31 +1158,31 @@ private struct PullPlanBannerCardView: View {
     private var circleColor: Color {
         switch progress {
         case .none:
-            return Color(red: 0.65, green: 0.42, blue: 0.51)
+            return WidgetPalette.unchecked
         case .planned:
-            return Color(red: 0.87, green: 0.31, blue: 0.55)
+            return WidgetPalette.pink
         case .completed:
-            return Color(red: 0.34, green: 0.67, blue: 0.61)
+            return WidgetPalette.completed
         }
     }
 
     private var primaryTextColor: Color {
         switch progress {
         case .none:
-            return Color(red: 0.34, green: 0.15, blue: 0.22)
+            return WidgetPalette.titlePrimary
         case .planned:
-            return Color(red: 0.58, green: 0.36, blue: 0.43)
+            return WidgetPalette.claimed
         case .completed:
-            return Color(red: 0.27, green: 0.47, blue: 0.43)
+            return WidgetPalette.completedText
         }
     }
 
     private var secondaryTextColor: Color {
         switch progress {
         case .completed:
-            return Color(red: 0.35, green: 0.58, blue: 0.53)
+            return WidgetPalette.completedSoft
         case .none, .planned:
-            return Color(red: 0.52, green: 0.26, blue: 0.36)
+            return WidgetPalette.accentMuted
         }
     }
 
@@ -1188,7 +1193,7 @@ private struct PullPlanBannerCardView: View {
         case .planned:
             return Color.white.opacity(0.12)
         case .completed:
-            return Color(red: 0.83, green: 0.95, blue: 0.91).opacity(0.34)
+            return WidgetPalette.cardCompletedFill
         }
     }
 
@@ -1232,7 +1237,7 @@ private struct PullPlanBannerCardView: View {
         VStack(alignment: .trailing, spacing: 5) {
             Text(isActive ? "进行中" : "未开始")
                 .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(isActive ? Color(red: 0.82, green: 0.30, blue: 0.53) : Color(red: 0.54, green: 0.31, blue: 0.40))
+                .foregroundStyle(isActive ? WidgetPalette.pinkStrong : WidgetPalette.mutedText)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(Color.white.opacity(0.28), in: Capsule())
@@ -1259,8 +1264,8 @@ private struct PullPlanBannerCardView: View {
                             }
                             .foregroundStyle(
                                 selectedUpCharacter == character
-                                    ? Color(red: 0.82, green: 0.30, blue: 0.53)
-                                    : Color(red: 0.52, green: 0.26, blue: 0.36)
+                                    ? WidgetPalette.pinkStrong
+                                    : WidgetPalette.accentMuted
                             )
                             .padding(.horizontal, 8)
                             .padding(.vertical, 6)
@@ -1298,8 +1303,8 @@ private struct PullPlanBannerCardView: View {
                             }
                             .foregroundStyle(
                                 selectedLockLevel == lockLevel
-                                    ? Color(red: 0.82, green: 0.30, blue: 0.53)
-                                    : Color(red: 0.52, green: 0.26, blue: 0.36)
+                                    ? WidgetPalette.pinkStrong
+                                    : WidgetPalette.accentMuted
                             )
                             .padding(.horizontal, 8)
                             .padding(.vertical, 6)
@@ -1352,7 +1357,7 @@ private struct PullPlanPityField: View {
         HStack(spacing: 5) {
             Text("垫抽")
                 .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundStyle(Color(red: 0.54, green: 0.31, blue: 0.40))
+                .foregroundStyle(WidgetPalette.mutedText)
 
             ZStack {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -1360,14 +1365,14 @@ private struct PullPlanPityField: View {
 
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .strokeBorder(
-                        Color(red: 0.82, green: 0.56, blue: 0.67).opacity(isFocused ? 0.72 : 0.34),
+                        WidgetPalette.pityBorder.opacity(isFocused ? 0.72 : 0.34),
                         lineWidth: 1
                     )
 
                 if text.isEmpty && !isFocused {
                     Text("0")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Color(red: 0.54, green: 0.31, blue: 0.40).opacity(0.78))
+                    .foregroundStyle(WidgetPalette.mutedText.opacity(0.78))
                 }
 
                 InlineNumericTextField(

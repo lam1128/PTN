@@ -155,6 +155,12 @@ struct RewardItem: Identifiable, Hashable {
     let isClaimed: Bool
 }
 
+struct RewardSourceDefinition: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let value: RewardValue
+}
+
 struct ManualUnknownReward: Identifiable, Hashable {
     let id: String
     let title: String

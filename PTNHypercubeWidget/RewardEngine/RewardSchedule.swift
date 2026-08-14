@@ -112,18 +112,18 @@ enum RewardSchedule {
         )
     ]
 
-    static let dailySources: [(id: String, title: String, value: RewardValue)] = [
-        ("daily-inspection", "每日监察任务", RewardValue(crystals: 40)),
-        ("daily-base", "基地监管", RewardValue(crystals: 24))
+    static let dailySources: [RewardSourceDefinition] = [
+        RewardSourceDefinition(id: "daily-inspection", title: "每日监察任务", value: RewardValue(crystals: 40)),
+        RewardSourceDefinition(id: "daily-base", title: "基地监管", value: RewardValue(crystals: 24))
     ]
 
-    static let weeklySources: [(id: String, title: String, value: RewardValue)] = [
-        ("weekly-inspection", "周监察任务", RewardValue(crystals: 150)),
-        ("weekly-share", "每周分享", RewardValue(crystals: 60))
+    static let weeklySources: [RewardSourceDefinition] = [
+        RewardSourceDefinition(id: "weekly-inspection", title: "周监察任务", value: RewardValue(crystals: 150)),
+        RewardSourceDefinition(id: "weekly-share", title: "每周分享", value: RewardValue(crystals: 60))
     ]
 
-    static let monthlySources: [(id: String, title: String, value: RewardValue)] = [
-        ("shop-exchange", "商店兑换", RewardValue(blueTickets: 8, redTickets: 5))
+    static let monthlySources: [RewardSourceDefinition] = [
+        RewardSourceDefinition(id: "shop-exchange", title: "商店兑换", value: RewardValue(blueTickets: 8, redTickets: 5))
     ]
 
     // visibleDays = 2 表示只显示当天和次日，第三天自动消失。
