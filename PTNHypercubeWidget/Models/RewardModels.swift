@@ -167,6 +167,19 @@ struct ManualUnknownReward: Identifiable, Hashable {
     let isClaimed: Bool
 }
 
+enum PermanentRewardTiming: Hashable {
+    case maintenance
+    case questionnaire
+}
+
+struct PermanentRewardDefinition: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let value: RewardValue
+    let sortOrder: Int
+    let timing: PermanentRewardTiming
+}
+
 enum DailyProgressDisplay: String, Hashable {
     case value
     case count
@@ -357,8 +370,24 @@ struct SecretPassSlot: Identifiable, Hashable {
     let isClaimed: Bool
 }
 
+enum ProgressModuleKind: String, Codable, Hashable {
+    case secretPass
+    case miniGame
+    case redemptionCode
+}
+
+struct ProgressModuleDefinition: Hashable {
+    let kind: ProgressModuleKind
+    let id: String
+    let title: String
+    let slotValue: RewardValue
+    let slotCount: Int
+    let showsCycleAdvanceButton: Bool
+}
+
 struct SecretPassProgress: Hashable {
     let id: String
+    let kind: ProgressModuleKind
     let title: String
     let slotValue: RewardValue
     let cycleVersion: Int

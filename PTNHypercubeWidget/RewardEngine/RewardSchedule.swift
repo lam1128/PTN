@@ -60,10 +60,23 @@ enum RewardSchedule {
 
     static let regulatoryEventTitle = "监管事件"
     static let regulatoryEventValue = RewardValue(crystals: 20)
+    static let activityPoolTitle = "活动池"
+    static let dailyDispatchID = "daily-dispatch"
+    static let dailyReviewID = "daily-review"
+    static let emotionRandomSourceID = "emotion-random"
+    static let dataGapManualSourceID = "data-gap-future"
+    static let bugFixRewardID = "bug-fix"
+    static let randomQuestionnaireRewardID = "questionnaire-random"
+    static let maintenanceRewardID = "maintenance-compensation"
+    static let questionnaireRewardID = "new-version-questionnaire"
+    static let permanentManualSourceOrder = [
+        bugFixRewardID,
+        randomQuestionnaireRewardID
+    ]
 
     static let dailyProgressDefinitions: [DailyProgressDefinition] = [
         DailyProgressDefinition(
-            id: "daily-dispatch",
+            id: dailyDispatchID,
             title: "派遣",
             slots: [5, 15, 25].enumerated().map { index, value in
                 DailyProgressSlotDefinition(
@@ -77,7 +90,7 @@ enum RewardSchedule {
             display: .value
         ),
         DailyProgressDefinition(
-            id: "daily-review",
+            id: dailyReviewID,
             title: "审查",
             slots: [
                 DailyProgressSlotDefinition(
@@ -145,16 +158,26 @@ enum RewardSchedule {
     // 这些来源奖励总量已知，但用户要求保留为手动领取，不自动推日期。
     static let manualUnknownSources: [ManualUnknownSourceDefinition] = [
         ManualUnknownSourceDefinition(
-            id: "emotion-random",
+            id: emotionRandomSourceID,
             title: "情绪检测·随机一天",
             value: RewardValue(blueTickets: 1),
             showsAdvanceCycleButton: false
         ),
         ManualUnknownSourceDefinition(
-            id: "data-gap-future",
+            id: dataGapManualSourceID,
             title: "数据间隙·第8赛季下",
             value: RewardValue(crystals: 1260),
             showsAdvanceCycleButton: false
+        ),
+        ManualUnknownSourceDefinition(
+            id: bugFixRewardID,
+            title: "问题修复",
+            value: RewardValue(crystals: 180)
+        ),
+        ManualUnknownSourceDefinition(
+            id: randomQuestionnaireRewardID,
+            title: "问卷调查·随机",
+            value: RewardValue(crystals: 180)
         )
     ]
 
@@ -168,6 +191,32 @@ enum RewardSchedule {
         )
     ]
 
+    // 常驻奖励跟随当前活动池更新；时间关系集中配置，避免写死具体日期。
+    static let permanentRewardDefinitions: [PermanentRewardDefinition] = [
+        PermanentRewardDefinition(
+            id: maintenanceRewardID,
+            title: "停服维护",
+            value: RewardValue(crystals: 200),
+            sortOrder: 100,
+            timing: .maintenance
+        ),
+        PermanentRewardDefinition(
+            id: questionnaireRewardID,
+            title: "问卷调查",
+            value: RewardValue(crystals: 180),
+            sortOrder: 110,
+            timing: .questionnaire
+        ),
+    ]
+    static let questionnaireStartOffsetDays = 7
+    static let questionnaireStartHour = 12
+    static let questionnaireStartMinute = 0
+    static let questionnaireEndOffsetDays = 13
+    static let questionnaireEndHour = 11
+    static let questionnaireEndMinute = 59
+    static let maintenanceStartOffsetHours = 5
+    static let maintenanceWindowDays = 7
+
     // 抽卡规划按 s1n.gg/banners 当前可见卡池录入。
     // 规则：
     // - 1 个橙色头像：event Arrest -> 活动池，routine Arrest -> 复刻池
@@ -177,14 +226,14 @@ enum RewardSchedule {
     static let pullPlanBanners: [PullPlanBanner] = [
         PullPlanBanner(
             id: "event-celine",
-            title: "活动池",
+            title: activityPoolTitle,
             start: DayStamp(year: 2026, month: 8, day: 7),
             end: DayStamp(year: 2026, month: 9, day: 10),
             characters: ["Celine"]
         ),
         PullPlanBanner(
             id: "event-isomer",
-            title: "活动池",
+            title: activityPoolTitle,
             start: DayStamp(year: 2026, month: 8, day: 7),
             end: DayStamp(year: 2026, month: 9, day: 10),
             characters: ["Isomer"]
@@ -227,7 +276,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "event-chengxiao",
-            title: "活动池",
+            title: activityPoolTitle,
             start: DayStamp(year: 2026, month: 9, day: 10),
             end: DayStamp(year: 2026, month: 10, day: 8),
             characters: ["Chengxiao"]
@@ -249,7 +298,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "event-phanuel",
-            title: "活动池",
+            title: activityPoolTitle,
             start: DayStamp(year: 2026, month: 10, day: 8),
             end: DayStamp(year: 2026, month: 11, day: 5),
             characters: ["Phanuel"]
@@ -287,7 +336,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "event-famorene-eirene",
-            title: "活动池",
+            title: activityPoolTitle,
             start: DayStamp(year: 2026, month: 11, day: 5),
             end: DayStamp(year: 2026, month: 12, day: 3),
             characters: ["Famorene Eirene"]
@@ -327,21 +376,42 @@ enum RewardSchedule {
         }
     }
 
-    static let secretPassID = "secret-society-pass"
-    static let secretPassTitle = "监察密令·渡鸦"
-    static let secretPassSlotValue = RewardValue(blueTickets: 1)
-    static let secretPassTotalSlots = 6
+    static let secretPassDefinition = ProgressModuleDefinition(
+        kind: .secretPass,
+        id: "secret-society-pass",
+        title: "监察密令·渡鸦",
+        slotValue: RewardValue(blueTickets: 1),
+        slotCount: 6,
+        showsCycleAdvanceButton: false
+    )
     static let secretPassSeasonEnd = DayStamp(year: 2026, month: 9, day: 14)
     static let secretPassSeasonEndHour = 4
     static let secretPassSeasonEndMinute = 59
     static let secretPassSeasonTimeZoneIdentifier = "Asia/Shanghai"
 
-    static let miniGameID = "event-mini-game"
-    static let miniGameTitle = "活动·小游戏"
-    static let miniGameSlotValue = RewardValue(crystals: 50)
-    static let miniGameTotalSlots = 5
+    static let miniGameDefinition = ProgressModuleDefinition(
+        kind: .miniGame,
+        id: "event-mini-game",
+        title: "活动·小游戏",
+        slotValue: RewardValue(crystals: 50),
+        slotCount: 5,
+        showsCycleAdvanceButton: true
+    )
 
-    static let dataGapManualSourceID = "data-gap-future"
+    static let redemptionCodeDefinition = ProgressModuleDefinition(
+        kind: .redemptionCode,
+        id: "redemption-code",
+        title: "兑换码",
+        slotValue: RewardValue(crystals: 200),
+        slotCount: 0,
+        showsCycleAdvanceButton: false
+    )
+    static let redemptionCodeStartHour = 8
+    static let redemptionCodeStartMinute = 0
+    // 2026-08-07 08:00 Europe/Berlin -> 2026-08-26 15:59 UTC+0。
+    static let redemptionCodeDuration: TimeInterval =
+        (19 * 24 * 60 * 60) + (9 * 60 * 60) + (59 * 60)
+
     static let dataGapCurrentSeasonEnd = DayStamp(year: 2026, month: 8, day: 18)
     static let dataGapCurrentSeasonEndHour = 4
     static let dataGapCurrentSeasonEndMinute = 0

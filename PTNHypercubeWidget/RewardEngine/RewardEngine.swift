@@ -2,11 +2,13 @@ import Foundation
 
 struct RewardSnapshot {
     let currentRewards: [RewardItem]
+    let permanentRewards: [RewardItem]
     let manualUnknownRewards: [ManualUnknownReward]
     let dailyExtraRewards: [RewardItem]
     let dailyProgresses: [DailyProgress]
     let secretPassProgress: SecretPassProgress
     let miniGameProgress: SecretPassProgress
+    let redemptionCodeProgress: SecretPassProgress
 }
 
 struct RewardEngine {
@@ -38,6 +40,7 @@ struct RewardEngine {
 
         return RewardSnapshot(
             currentRewards: sortCurrentRewards(rewards),
+            permanentRewards: makePermanentRewards(for: currentDate, claimedKeys: claimedKeys),
             manualUnknownRewards: sortManualUnknownRewards(
                 makeManualUnknownRewards(
                     now: currentDate,
@@ -60,8 +63,137 @@ struct RewardEngine {
             miniGameProgress: makeMiniGameProgress(
                 claimedKeys: claimedKeys,
                 manualCycleVersions: manualCycleVersions
+            ),
+            redemptionCodeProgress: makeRedemptionCodeProgress(
+                now: currentDate,
+                claimedKeys: claimedKeys,
+                manualCycleVersions: manualCycleVersions
             )
         )
+    }
+
+    private func makePermanentRewards(
+        for currentDate: Date,
+        claimedKeys: Set<String>
+    ) -> [RewardItem] {
+        guard let anchor = currentPermanentRewardAnchor(at: currentDate) else {
+            return []
+        }
+        let poolTitle = permanentRewardPoolTitle(for: anchor)
+
+        return RewardSchedule.permanentRewardDefinitions.compactMap { definition in
+            guard let window = permanentRewardWindow(for: definition, anchor: anchor),
+                  window.start <= currentDate,
+                  currentDate < window.end else {
+                return nil
+            }
+
+            let claimKey = "permanent-reward-\(definition.id)-\(anchor.id)"
+            let title = "\(definition.title)·\(poolTitle)"
+            return RewardItem(
+                id: claimKey,
+                category: .unknownSchedule,
+                title: title,
+                footnote: remainingText(
+                    until: window.end,
+                    now: currentDate,
+                    hourSuffix: "时"
+                ),
+                displayValue: definition.value,
+                claimValue: definition.value,
+                claimSource: title,
+                claimKey: claimKey,
+                sortOrder: definition.sortOrder,
+                isClaimed: claimedKeys.contains(claimKey)
+            )
+        }
+        .sorted { lhs, rhs in
+            return lhs.sortOrder < rhs.sortOrder
+        }
+    }
+
+    private func permanentRewardPoolTitle(for anchor: PullPlanBanner) -> String {
+        let matchingBanners = RewardSchedule.pullPlanBanners.filter { banner in
+            banner.title == RewardSchedule.activityPoolTitle
+                && banner.startsAt(in: calendar) == anchor.startsAt(in: calendar)
+        }
+        return RewardSchedule.eventTrialTitle(for: matchingBanners)
+    }
+
+    private func currentPermanentRewardAnchor(at date: Date) -> PullPlanBanner? {
+        activePermanentRewardBanners(at: date)
+            .max { lhs, rhs in
+                let lhsStart = lhs.startsAt(in: calendar)
+                let rhsStart = rhs.startsAt(in: calendar)
+                if lhsStart != rhsStart {
+                    return lhsStart < rhsStart
+                }
+                // 同期活动池中，Isomer 是当前常驻奖励对应的池；保持配置顺序无关。
+                return lhs.id < rhs.id
+            }
+    }
+
+    private func activePermanentRewardBanners(at date: Date) -> [PullPlanBanner] {
+        // 只依赖活动池类型和实际时间，后续新增活动池会自动继承常驻奖励规则。
+        RewardSchedule.pullPlanBanners.filter { banner in
+            banner.title == RewardSchedule.activityPoolTitle && banner.isActive(at: date, calendar: calendar)
+        }
+    }
+
+    private func permanentRewardPoolBanners(for anchor: PullPlanBanner) -> [PullPlanBanner] {
+        RewardSchedule.pullPlanBanners.filter { banner in
+            banner.title == RewardSchedule.activityPoolTitle
+                && banner.startsAt(in: calendar) == anchor.startsAt(in: calendar)
+        }
+    }
+
+    private func permanentRewardWindow(
+        for definition: PermanentRewardDefinition,
+        anchor: PullPlanBanner
+    ) -> (start: Date, end: Date)? {
+        let anchorStart = anchor.startsAt(in: calendar)
+
+        switch definition.timing {
+        case .maintenance:
+            guard let start = calendar.date(
+                byAdding: .hour,
+                value: RewardSchedule.maintenanceStartOffsetHours,
+                to: anchorStart
+            ),
+            let end = calendar.date(
+                byAdding: .day,
+                value: RewardSchedule.maintenanceWindowDays,
+                to: start
+            ) else {
+                return nil
+            }
+            return (start, end)
+        case .questionnaire:
+            guard let questionnaireDay = calendar.date(
+                byAdding: .day,
+                value: RewardSchedule.questionnaireStartOffsetDays,
+                to: anchorStart
+            ),
+            let endDay = calendar.date(
+                byAdding: .day,
+                value: RewardSchedule.questionnaireEndOffsetDays,
+                to: questionnaireDay
+            ) else {
+                return nil
+            }
+
+            let start = preciseDate(
+                day: DayStamp.from(questionnaireDay, calendar: calendar),
+                hour: RewardSchedule.questionnaireStartHour,
+                minute: RewardSchedule.questionnaireStartMinute
+            )
+            let end = preciseDate(
+                day: DayStamp.from(endDay, calendar: calendar),
+                hour: RewardSchedule.questionnaireEndHour,
+                minute: RewardSchedule.questionnaireEndMinute
+            )
+            return (start, end)
+        }
     }
 
     private func makeDailyExtraRewards(
@@ -267,7 +399,7 @@ struct RewardEngine {
 
     private func makeEventTrialReward(for currentDate: Date, claimedKeys: Set<String>) -> RewardItem? {
         let activeEventBanners = RewardSchedule.pullPlanBanners
-            .filter { $0.title == "活动池" && $0.isActive(at: currentDate, calendar: calendar) }
+            .filter { $0.title == RewardSchedule.activityPoolTitle && $0.isActive(at: currentDate, calendar: calendar) }
             .sorted { lhs, rhs in
                 let lhsStart = lhs.startsAt(in: calendar)
                 let rhsStart = rhs.startsAt(in: calendar)
@@ -348,7 +480,7 @@ struct RewardEngine {
     }
 
     private func manualUnknownClaimKey(for sourceID: String, version: Int, now: Date) -> String {
-        if sourceID == "emotion-random" {
+        if sourceID == RewardSchedule.emotionRandomSourceID {
             return "\(sourceID)-\(monthStart(for: DayStamp.rewardDay(from: now, calendar: calendar)).key)"
         }
         return "\(sourceID)-manual-v\(version)"
@@ -360,13 +492,15 @@ struct RewardEngine {
         manualCycleVersions: [String: Int],
         hasPremiumSecretPass: Bool
     ) -> SecretPassProgress {
-        makeProgress(
-            id: RewardSchedule.secretPassID,
-            title: RewardSchedule.secretPassTitle,
+        let definition = RewardSchedule.secretPassDefinition
+        return makeProgress(
+            id: definition.id,
+            kind: definition.kind,
+            title: definition.title,
             slotValue: hasPremiumSecretPass
-                ? RewardValue(blueTickets: RewardSchedule.secretPassSlotValue.blueTickets * 2)
-                : RewardSchedule.secretPassSlotValue,
-            slotCount: RewardSchedule.secretPassTotalSlots,
+                ? RewardValue(blueTickets: definition.slotValue.blueTickets * 2)
+                : definition.slotValue,
+            slotCount: definition.slotCount,
             remainingText: remainingText(
                 until: preciseDate(
                     day: RewardSchedule.secretPassSeasonEnd,
@@ -380,7 +514,7 @@ struct RewardEngine {
             claimedKeys: claimedKeys,
             manualCycleVersions: manualCycleVersions,
             isPremiumPurchased: hasPremiumSecretPass,
-            showsCycleAdvanceButton: false
+            showsCycleAdvanceButton: definition.showsCycleAdvanceButton
         )
     }
 
@@ -388,21 +522,84 @@ struct RewardEngine {
         claimedKeys: Set<String>,
         manualCycleVersions: [String: Int]
     ) -> SecretPassProgress {
-        makeProgress(
-            id: RewardSchedule.miniGameID,
-            title: RewardSchedule.miniGameTitle,
-            slotValue: RewardSchedule.miniGameSlotValue,
-            slotCount: RewardSchedule.miniGameTotalSlots,
+        let definition = RewardSchedule.miniGameDefinition
+        return makeProgress(
+            id: definition.id,
+            kind: definition.kind,
+            title: definition.title,
+            slotValue: definition.slotValue,
+            slotCount: definition.slotCount,
             remainingText: nil,
             claimedKeys: claimedKeys,
             manualCycleVersions: manualCycleVersions,
             isPremiumPurchased: false,
-            showsCycleAdvanceButton: true
+            showsCycleAdvanceButton: definition.showsCycleAdvanceButton
+        )
+    }
+
+    private func makeRedemptionCodeProgress(
+        now: Date,
+        claimedKeys: Set<String>,
+        manualCycleVersions: [String: Int]
+    ) -> SecretPassProgress {
+        let definition = RewardSchedule.redemptionCodeDefinition
+        guard let anchor = currentPermanentRewardAnchor(at: now) else {
+            return makeProgress(
+                id: definition.id,
+                kind: definition.kind,
+                title: definition.title,
+                slotValue: definition.slotValue,
+                slotCount: definition.slotCount,
+                remainingText: nil,
+                claimedKeys: claimedKeys,
+                manualCycleVersions: manualCycleVersions,
+                isPremiumPurchased: false,
+                showsCycleAdvanceButton: definition.showsCycleAdvanceButton
+            )
+        }
+
+        let title = "兑换码·\(permanentRewardPoolTitle(for: anchor))"
+        let activeStart = preciseDate(
+            day: anchor.start,
+            hour: RewardSchedule.redemptionCodeStartHour,
+            minute: RewardSchedule.redemptionCodeStartMinute
+        )
+        let end = activeStart.addingTimeInterval(RewardSchedule.redemptionCodeDuration)
+        let slotCount = permanentRewardPoolBanners(for: anchor).count >= 2 ? 3 : 1
+        let cycleID = "\(definition.id)-\(anchor.id)"
+
+        guard activeStart <= now, now < end else {
+            return makeProgress(
+                id: cycleID,
+                kind: definition.kind,
+                title: title,
+                slotValue: definition.slotValue,
+                slotCount: 0,
+                remainingText: nil,
+                claimedKeys: claimedKeys,
+                manualCycleVersions: manualCycleVersions,
+                isPremiumPurchased: false,
+                showsCycleAdvanceButton: definition.showsCycleAdvanceButton
+            )
+        }
+
+        return makeProgress(
+            id: cycleID,
+            kind: definition.kind,
+            title: title,
+            slotValue: definition.slotValue,
+            slotCount: slotCount,
+            remainingText: remainingText(until: end, now: now, hourSuffix: "时"),
+            claimedKeys: claimedKeys,
+            manualCycleVersions: manualCycleVersions,
+            isPremiumPurchased: false,
+            showsCycleAdvanceButton: definition.showsCycleAdvanceButton
         )
     }
 
     private func makeProgress(
         id: String,
+        kind: ProgressModuleKind,
         title: String,
         slotValue: RewardValue,
         slotCount: Int,
@@ -413,20 +610,23 @@ struct RewardEngine {
         showsCycleAdvanceButton: Bool
     ) -> SecretPassProgress {
         let version = manualCycleVersions[id] ?? 0
-        let slots = (1...slotCount).map { index in
-            let baseClaimKey = "\(id)-v\(version)-slot-\(index)"
-            let premiumClaimKey = "\(id)-v\(version)-slot-\(index)-premium"
-            return SecretPassSlot(
-                id: baseClaimKey,
-                index: index,
-                baseClaimKey: baseClaimKey,
-                premiumClaimKey: premiumClaimKey,
-                isClaimed: claimedKeys.contains(baseClaimKey)
-            )
-        }
+        let slots: [SecretPassSlot] = slotCount == 0
+            ? []
+            : (1...slotCount).map { index in
+                let baseClaimKey = "\(id)-v\(version)-slot-\(index)"
+                let premiumClaimKey = "\(id)-v\(version)-slot-\(index)-premium"
+                return SecretPassSlot(
+                    id: baseClaimKey,
+                    index: index,
+                    baseClaimKey: baseClaimKey,
+                    premiumClaimKey: premiumClaimKey,
+                    isClaimed: claimedKeys.contains(baseClaimKey)
+                )
+            }
 
         return SecretPassProgress(
             id: id,
+            kind: kind,
             title: title,
             slotValue: slotValue,
             cycleVersion: version,
@@ -480,21 +680,22 @@ struct RewardEngine {
         guard interval > 0 else { return nil }
 
         let days = interval / 86_400
-        let hours = (interval % 86_400) / 3_600
 
         if days > 0 {
-            return "\(days)天\(hours)\(hourSuffix)"
+            return "\(days)天"
         }
 
-        let minutes = (interval % 3_600) / 60
-        return String(format: "%02d:%02d", hours, minutes)
+        if interval >= 3_600 {
+            let hours = Int(ceil(Double(interval) / 3_600.0))
+            return "\(hours)\(hourSuffix)"
+        }
+
+        let minutes = max(1, interval / 60)
+        return "\(minutes)分"
     }
 
     private func sortCurrentRewards(_ rewards: [RewardItem]) -> [RewardItem] {
         rewards.sorted { lhs, rhs in
-            if lhs.isClaimed != rhs.isClaimed {
-                return !lhs.isClaimed && rhs.isClaimed
-            }
             if lhs.sortOrder != rhs.sortOrder {
                 return lhs.sortOrder < rhs.sortOrder
             }
@@ -503,12 +704,7 @@ struct RewardEngine {
     }
 
     private func sortManualUnknownRewards(_ rewards: [ManualUnknownReward]) -> [ManualUnknownReward] {
-        rewards.sorted { lhs, rhs in
-            if lhs.isClaimed != rhs.isClaimed {
-                return !lhs.isClaimed && rhs.isClaimed
-            }
-            return lhs.title < rhs.title
-        }
+        rewards
     }
 
     func currentDarkZoneClaimKey(on currentDate: Date) -> String {

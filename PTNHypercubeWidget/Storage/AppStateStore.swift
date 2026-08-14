@@ -8,11 +8,13 @@ final class AppStateStore: ObservableObject {
     @Published private(set) var claimedRewardKeys: Set<String>
     @Published private(set) var history: [HistoryEntry]
     @Published private(set) var currentRewards: [RewardItem] = []
+    @Published private(set) var permanentRewards: [RewardItem] = []
     @Published private(set) var manualUnknownRewards: [ManualUnknownReward] = []
     @Published private(set) var dailyExtraRewards: [RewardItem] = []
     @Published private(set) var dailyProgresses: [DailyProgress] = []
     @Published private(set) var secretPassProgress: SecretPassProgress
     @Published private(set) var miniGameProgress: SecretPassProgress
+    @Published private(set) var redemptionCodeProgress: SecretPassProgress
     @Published private(set) var hasPremiumSecretPass: Bool
     @Published private(set) var usesExtraTranslucentBackground: Bool
     @Published private(set) var pullPlanBannerProgressRawValues: [String: Int]
@@ -71,24 +73,37 @@ final class AppStateStore: ObservableObject {
         self.hasPremiumSecretPass = defaults.object(forKey: StorageKey.hasPremiumSecretPass) as? Bool ?? false
         self.usesExtraTranslucentBackground = defaults.object(forKey: StorageKey.usesExtraTranslucentBackground) as? Bool ?? false
         self.secretPassProgress = SecretPassProgress(
-            id: RewardSchedule.secretPassID,
-            title: RewardSchedule.secretPassTitle,
-            slotValue: RewardSchedule.secretPassSlotValue,
+            id: RewardSchedule.secretPassDefinition.id,
+            kind: RewardSchedule.secretPassDefinition.kind,
+            title: RewardSchedule.secretPassDefinition.title,
+            slotValue: RewardSchedule.secretPassDefinition.slotValue,
             cycleVersion: 0,
             slots: [],
             remainingText: nil,
             isPremiumPurchased: false,
-            showsCycleAdvanceButton: false
+            showsCycleAdvanceButton: RewardSchedule.secretPassDefinition.showsCycleAdvanceButton
         )
         self.miniGameProgress = SecretPassProgress(
-            id: RewardSchedule.miniGameID,
-            title: RewardSchedule.miniGameTitle,
-            slotValue: RewardSchedule.miniGameSlotValue,
+            id: RewardSchedule.miniGameDefinition.id,
+            kind: RewardSchedule.miniGameDefinition.kind,
+            title: RewardSchedule.miniGameDefinition.title,
+            slotValue: RewardSchedule.miniGameDefinition.slotValue,
             cycleVersion: 0,
             slots: [],
             remainingText: nil,
             isPremiumPurchased: false,
-            showsCycleAdvanceButton: true
+            showsCycleAdvanceButton: RewardSchedule.miniGameDefinition.showsCycleAdvanceButton
+        )
+        self.redemptionCodeProgress = SecretPassProgress(
+            id: RewardSchedule.redemptionCodeDefinition.id,
+            kind: RewardSchedule.redemptionCodeDefinition.kind,
+            title: RewardSchedule.redemptionCodeDefinition.title,
+            slotValue: RewardSchedule.redemptionCodeDefinition.slotValue,
+            cycleVersion: 0,
+            slots: [],
+            remainingText: nil,
+            isPremiumPurchased: false,
+            showsCycleAdvanceButton: RewardSchedule.redemptionCodeDefinition.showsCycleAdvanceButton
         )
         bootstrapInitialStateIfNeeded()
         refreshRewards()
@@ -151,11 +166,13 @@ final class AppStateStore: ObservableObject {
             hasPremiumSecretPass: hasPremiumSecretPass
         )
         currentRewards = snapshot.currentRewards
+        permanentRewards = snapshot.permanentRewards
         manualUnknownRewards = snapshot.manualUnknownRewards
         dailyExtraRewards = snapshot.dailyExtraRewards
         dailyProgresses = snapshot.dailyProgresses
         secretPassProgress = snapshot.secretPassProgress
         miniGameProgress = snapshot.miniGameProgress
+        redemptionCodeProgress = snapshot.redemptionCodeProgress
     }
 
     func claim(_ reward: RewardItem, now: Date = Date()) {
@@ -244,17 +261,19 @@ final class AppStateStore: ObservableObject {
     }
 
     func claimSecretPassSlot(_ slot: SecretPassSlot, now: Date = Date()) {
-        recordClaim(claimKey: slot.baseClaimKey, value: RewardSchedule.secretPassSlotValue, source: "\(RewardSchedule.secretPassTitle) 第\(slot.index)抽", now: now)
+        let definition = RewardSchedule.secretPassDefinition
+        recordClaim(claimKey: slot.baseClaimKey, value: definition.slotValue, source: "\(definition.title) 第\(slot.index)抽", now: now)
 
         if hasPremiumSecretPass {
-            recordClaim(claimKey: slot.premiumClaimKey, value: RewardSchedule.secretPassSlotValue, source: "\(RewardSchedule.secretPassTitle) 高级奖励 第\(slot.index)抽", now: now)
+            recordClaim(claimKey: slot.premiumClaimKey, value: definition.slotValue, source: "\(definition.title) 高级奖励 第\(slot.index)抽", now: now)
         }
     }
 
     func toggleSecretPassSlot(_ slot: SecretPassSlot, now: Date = Date()) {
+        let definition = RewardSchedule.secretPassDefinition
         if claimedRewardKeys.contains(slot.baseClaimKey) {
-            unclaim(claimKey: slot.baseClaimKey, value: RewardSchedule.secretPassSlotValue, now: now)
-            unclaim(claimKey: slot.premiumClaimKey, value: RewardSchedule.secretPassSlotValue, now: now)
+            unclaim(claimKey: slot.baseClaimKey, value: definition.slotValue, now: now)
+            unclaim(claimKey: slot.premiumClaimKey, value: definition.slotValue, now: now)
         } else {
             claimSecretPassSlot(slot, now: now)
         }
@@ -264,19 +283,20 @@ final class AppStateStore: ObservableObject {
         guard self.hasPremiumSecretPass != hasPremiumSecretPass else { return }
 
         self.hasPremiumSecretPass = hasPremiumSecretPass
+        let definition = RewardSchedule.secretPassDefinition
 
         for slot in secretPassProgress.slots where claimedRewardKeys.contains(slot.baseClaimKey) {
             if hasPremiumSecretPass {
                 recordClaim(
                     claimKey: slot.premiumClaimKey,
-                    value: RewardSchedule.secretPassSlotValue,
-                    source: "\(RewardSchedule.secretPassTitle) 高级奖励 第\(slot.index)抽",
+                    value: definition.slotValue,
+                    source: "\(definition.title) 高级奖励 第\(slot.index)抽",
                     now: now
                 )
             } else {
                 unclaim(
                     claimKey: slot.premiumClaimKey,
-                    value: RewardSchedule.secretPassSlotValue,
+                    value: definition.slotValue,
                     now: now
                 )
             }
@@ -287,19 +307,63 @@ final class AppStateStore: ObservableObject {
     }
 
     func claimMiniGameSlot(_ slot: SecretPassSlot, now: Date = Date()) {
-        recordClaim(
-            claimKey: slot.baseClaimKey,
-            value: RewardSchedule.miniGameSlotValue,
-            source: "\(RewardSchedule.miniGameTitle) 第\(slot.index)关",
+        let definition = RewardSchedule.miniGameDefinition
+        recordStandardProgressSlot(
+            slot,
+            value: definition.slotValue,
+            source: "\(definition.title) 第\(slot.index)关",
             now: now
         )
     }
 
     func toggleMiniGameSlot(_ slot: SecretPassSlot, now: Date = Date()) {
+        let definition = RewardSchedule.miniGameDefinition
+        toggleStandardProgressSlot(
+            slot,
+            value: definition.slotValue,
+            source: "\(definition.title) 第\(slot.index)关",
+            now: now
+        )
+    }
+
+    func toggleRedemptionCodeSlot(
+        _ progress: SecretPassProgress,
+        slot: SecretPassSlot,
+        now: Date = Date()
+    ) {
+        let definition = RewardSchedule.redemptionCodeDefinition
+        toggleStandardProgressSlot(
+            slot,
+            value: definition.slotValue,
+            source: "\(progress.title) 第\(slot.index)个",
+            now: now
+        )
+    }
+
+    private func recordStandardProgressSlot(
+        _ slot: SecretPassSlot,
+        value: RewardValue,
+        source: String,
+        now: Date
+    ) {
+        recordClaim(
+            claimKey: slot.baseClaimKey,
+            value: value,
+            source: source,
+            now: now
+        )
+    }
+
+    private func toggleStandardProgressSlot(
+        _ slot: SecretPassSlot,
+        value: RewardValue,
+        source: String,
+        now: Date
+    ) {
         if claimedRewardKeys.contains(slot.baseClaimKey) {
-            unclaim(claimKey: slot.baseClaimKey, value: RewardSchedule.miniGameSlotValue, now: now)
+            unclaim(claimKey: slot.baseClaimKey, value: value, now: now)
         } else {
-            claimMiniGameSlot(slot, now: now)
+            recordStandardProgressSlot(slot, value: value, source: source, now: now)
         }
     }
 
