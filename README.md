@@ -9,6 +9,7 @@
 3. 运行：
 
 ```bash
+cd /Users/admin/Developer/5732
 ./build-standalone-app.sh
 ```
 
