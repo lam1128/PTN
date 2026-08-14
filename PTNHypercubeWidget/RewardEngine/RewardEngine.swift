@@ -3,6 +3,8 @@ import Foundation
 struct RewardSnapshot {
     let currentRewards: [RewardItem]
     let manualUnknownRewards: [ManualUnknownReward]
+    let dailyExtraRewards: [RewardItem]
+    let dailyProgresses: [DailyProgress]
     let secretPassProgress: SecretPassProgress
     let miniGameProgress: SecretPassProgress
 }
@@ -14,6 +16,7 @@ struct RewardEngine {
         on currentDate: Date,
         claimedKeys: Set<String>,
         manualCycleVersions: [String: Int],
+        dailyCycleVersions: [String: Int],
         hasPremiumSecretPass: Bool
     ) -> RewardSnapshot {
         let today = DayStamp.rewardDay(from: currentDate, calendar: calendar)
@@ -42,6 +45,12 @@ struct RewardEngine {
                     manualCycleVersions: manualCycleVersions
                 )
             ),
+            dailyExtraRewards: makeDailyExtraRewards(for: today, claimedKeys: claimedKeys),
+            dailyProgresses: makeDailyProgresses(
+                for: today,
+                claimedKeys: claimedKeys,
+                dailyCycleVersions: dailyCycleVersions
+            ),
             secretPassProgress: makeSecretPassProgress(
                 now: currentDate,
                 claimedKeys: claimedKeys,
@@ -53,6 +62,66 @@ struct RewardEngine {
                 manualCycleVersions: manualCycleVersions
             )
         )
+    }
+
+    private func makeDailyExtraRewards(
+        for day: DayStamp,
+        claimedKeys: Set<String>
+    ) -> [RewardItem] {
+        let claimKey = "regulatory-event-\(day.key)"
+        return [
+            RewardItem(
+                id: claimKey,
+                category: .unknownSchedule,
+                title: RewardSchedule.regulatoryEventTitle,
+                footnote: nil,
+                displayValue: RewardSchedule.regulatoryEventValue,
+                claimValue: RewardSchedule.regulatoryEventValue,
+                claimSource: RewardSchedule.regulatoryEventTitle,
+                claimKey: claimKey,
+                sortOrder: 500,
+                isClaimed: claimedKeys.contains(claimKey)
+            )
+        ]
+    }
+
+    private func makeDailyProgresses(
+        for day: DayStamp,
+        claimedKeys: Set<String>,
+        dailyCycleVersions: [String: Int]
+    ) -> [DailyProgress] {
+        RewardSchedule.dailyProgressDefinitions.map { definition in
+            let slots = definition.slots.enumerated().map { offset, slotDefinition in
+                let index = offset + 1
+                let cycleID = "\(definition.id)-\(day.key)-\(slotDefinition.id)"
+                let cycleVersion = dailyCycleVersions[cycleID] ?? 0
+                let versionSuffix = cycleVersion == 0 ? "" : "-v\(cycleVersion)"
+                let claimPrefix = "\(cycleID)\(versionSuffix)"
+                let claimKeys = (1...slotDefinition.maxCount).map { count in
+                    "\(claimPrefix)-\(count)"
+                }
+                let completionClaimKey = slotDefinition.completionBonus.isZero
+                    ? nil
+                    : "\(claimPrefix)-completion"
+                return DailyProgressSlot(
+                    id: cycleID,
+                    index: index,
+                    value: slotDefinition.value,
+                    claimKeys: claimKeys,
+                    count: claimKeys.filter { claimedKeys.contains($0) }.count,
+                    tint: slotDefinition.tint,
+                    completionBonus: slotDefinition.completionBonus,
+                    completionClaimKey: completionClaimKey,
+                    isCompletionClaimed: completionClaimKey.map { claimedKeys.contains($0) } ?? false
+                )
+            }
+            return DailyProgress(
+                id: definition.id,
+                title: definition.title,
+                slots: slots,
+                display: definition.display
+            )
+        }
     }
 
     private func makeDailyRewards(for day: DayStamp, claimedKeys: Set<String>) -> [RewardItem] {

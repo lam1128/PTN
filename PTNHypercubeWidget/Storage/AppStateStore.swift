@@ -9,6 +9,8 @@ final class AppStateStore: ObservableObject {
     @Published private(set) var history: [HistoryEntry]
     @Published private(set) var currentRewards: [RewardItem] = []
     @Published private(set) var manualUnknownRewards: [ManualUnknownReward] = []
+    @Published private(set) var dailyExtraRewards: [RewardItem] = []
+    @Published private(set) var dailyProgresses: [DailyProgress] = []
     @Published private(set) var secretPassProgress: SecretPassProgress
     @Published private(set) var miniGameProgress: SecretPassProgress
     @Published private(set) var hasPremiumSecretPass: Bool
@@ -21,6 +23,7 @@ final class AppStateStore: ObservableObject {
     private let defaults: UserDefaults
     private let rewardEngine: RewardEngine
     private var manualCycleVersions: [String: Int]
+    private var dailyCycleVersions: [String: Int]
 
     private enum StorageKey {
         static let totalCrystals = "ptn.totalCrystals"
@@ -30,6 +33,7 @@ final class AppStateStore: ObservableObject {
         static let claimedRewardKeys = "ptn.claimedRewardKeys"
         static let history = "ptn.history"
         static let manualCycleVersions = "ptn.manualCycleVersions"
+        static let dailyCycleVersions = "ptn.dailyCycleVersions"
         static let didBootstrapInitialState = "ptn.didBootstrapInitialState"
         static let selectedPullPlanBannerIDs = "ptn.selectedPullPlanBannerIDs"
         static let pullPlanBannerProgressRawValues = "ptn.pullPlanBannerProgressRawValues"
@@ -54,6 +58,7 @@ final class AppStateStore: ObservableObject {
         self.claimedRewardKeys = Set(defaults.stringArray(forKey: StorageKey.claimedRewardKeys) ?? [])
         self.history = Self.loadHistory(from: defaults.data(forKey: StorageKey.history))
         self.manualCycleVersions = defaults.dictionary(forKey: StorageKey.manualCycleVersions) as? [String: Int] ?? [:]
+        self.dailyCycleVersions = defaults.dictionary(forKey: StorageKey.dailyCycleVersions) as? [String: Int] ?? [:]
         let savedProgress = defaults.dictionary(forKey: StorageKey.pullPlanBannerProgressRawValues) as? [String: Int] ?? [:]
         let legacyPlannedBannerIDs = Set(defaults.stringArray(forKey: StorageKey.selectedPullPlanBannerIDs) ?? [])
         self.pullPlanBannerProgressRawValues = savedProgress.isEmpty
@@ -142,10 +147,13 @@ final class AppStateStore: ObservableObject {
             on: now,
             claimedKeys: claimedRewardKeys,
             manualCycleVersions: manualCycleVersions,
+            dailyCycleVersions: dailyCycleVersions,
             hasPremiumSecretPass: hasPremiumSecretPass
         )
         currentRewards = snapshot.currentRewards
         manualUnknownRewards = snapshot.manualUnknownRewards
+        dailyExtraRewards = snapshot.dailyExtraRewards
+        dailyProgresses = snapshot.dailyProgresses
         secretPassProgress = snapshot.secretPassProgress
         miniGameProgress = snapshot.miniGameProgress
     }
@@ -182,6 +190,57 @@ final class AppStateStore: ObservableObject {
         } else {
             claimManualUnknown(reward, now: now)
         }
+    }
+
+    func toggleDailyProgressSlot(
+        _ progress: DailyProgress,
+        slot: DailyProgressSlot,
+        now: Date = Date()
+    ) {
+        if slot.isCompletionClaimed {
+            let cycleID = slot.id
+            let nextVersion = dailyCycleVersions[cycleID, default: 0] + 1
+            dailyCycleVersions[cycleID] = nextVersion
+            recordClaim(
+                claimKey: "\(cycleID)-v\(nextVersion)-1",
+                value: slot.value,
+                source: "\(progress.title) 第\(slot.index)项",
+                now: now
+            )
+            return
+        }
+
+        let nextCount = slot.count == slot.maxCount ? 0 : slot.count + 1
+
+        if nextCount > slot.count {
+            for claimKey in slot.claimKeys[slot.count..<nextCount] {
+                recordClaim(
+                    claimKey: claimKey,
+                    value: slot.value,
+                    source: "\(progress.title) 第\(slot.index)项",
+                    now: now
+                )
+            }
+        } else {
+            for claimKey in slot.claimKeys[nextCount..<slot.count].reversed() {
+                unclaim(claimKey: claimKey, value: slot.value, now: now)
+            }
+        }
+    }
+
+    func completeDailyProgress(
+        _ progress: DailyProgress,
+        now: Date = Date()
+    ) {
+        guard let slot = progress.slots.first(where: \.canComplete),
+              let bonusKey = slot.completionClaimKey else { return }
+
+        recordClaim(
+            claimKey: bonusKey,
+            value: slot.completionBonus,
+            source: "\(progress.title) 第\(slot.index)项完成奖励",
+            now: now
+        )
     }
 
     func claimSecretPassSlot(_ slot: SecretPassSlot, now: Date = Date()) {
@@ -430,6 +489,7 @@ final class AppStateStore: ObservableObject {
         defaults.set(totalRedTickets, forKey: StorageKey.totalRedTickets)
         defaults.set(Array(claimedRewardKeys).sorted(), forKey: StorageKey.claimedRewardKeys)
         defaults.set(manualCycleVersions, forKey: StorageKey.manualCycleVersions)
+        defaults.set(dailyCycleVersions, forKey: StorageKey.dailyCycleVersions)
         defaults.set(pullPlanBannerProgressRawValues, forKey: StorageKey.pullPlanBannerProgressRawValues)
         defaults.set(selectedPullPlanUpChoices, forKey: StorageKey.selectedPullPlanUpChoices)
         defaults.set(selectedPullPlanLockChoices, forKey: StorageKey.selectedPullPlanLockChoices)

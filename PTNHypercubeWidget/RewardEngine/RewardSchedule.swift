@@ -40,6 +40,13 @@ struct EventTrialTitleOverride: Hashable {
     let title: String
 }
 
+struct DailyProgressDefinition: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let slots: [DailyProgressSlotDefinition]
+    let display: DailyProgressDisplay
+}
+
 enum RewardSchedule {
     // 暗域锚点：
     // 2026-07-20 是第 31 期第 1 周的周一，之后严格按 6 周一赛季循环。
@@ -50,6 +57,47 @@ enum RewardSchedule {
     static let darkZoneSeasonOpeningBonus = RewardValue(crystals: 450)
 
     static let dailyFixedClaimSource = "每日固定"
+
+    static let regulatoryEventTitle = "监管事件"
+    static let regulatoryEventValue = RewardValue(crystals: 20)
+
+    static let dailyProgressDefinitions: [DailyProgressDefinition] = [
+        DailyProgressDefinition(
+            id: "daily-dispatch",
+            title: "派遣",
+            slots: [5, 15, 25].enumerated().map { index, value in
+                DailyProgressSlotDefinition(
+                    id: "dispatch-\(index + 1)",
+                    value: RewardValue(crystals: value),
+                    maxCount: 1,
+                    tint: .neutral,
+                    completionBonus: .zero
+                )
+            },
+            display: .value
+        ),
+        DailyProgressDefinition(
+            id: "daily-review",
+            title: "审查",
+            slots: [
+                DailyProgressSlotDefinition(
+                    id: "orange",
+                    value: RewardValue(crystals: 50),
+                    maxCount: 4,
+                    tint: .orange,
+                    completionBonus: RewardValue(crystals: 90)
+                ),
+                DailyProgressSlotDefinition(
+                    id: "purple",
+                    value: RewardValue(crystals: 50),
+                    maxCount: 3,
+                    tint: .purple,
+                    completionBonus: RewardValue(crystals: 10)
+                )
+            ],
+            display: .count
+        )
+    ]
 
     static let dailySources: [(id: String, title: String, value: RewardValue)] = [
         ("daily-inspection", "每日监察任务", RewardValue(crystals: 40)),

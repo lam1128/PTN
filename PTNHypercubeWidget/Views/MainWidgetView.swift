@@ -15,6 +15,8 @@ private enum WidgetPalette {
     static let completed = Color(red: 0.34, green: 0.67, blue: 0.61)
     static let completedText = Color(red: 0.27, green: 0.47, blue: 0.43)
     static let completedSoft = Color(red: 0.35, green: 0.58, blue: 0.53)
+    static let progressOrange = Color(red: 0.93, green: 0.50, blue: 0.22)
+    static let progressPurple = Color(red: 0.54, green: 0.34, blue: 0.76)
     static let cardCompletedFill = Color(red: 0.83, green: 0.95, blue: 0.91).opacity(0.34)
     static let overlayFill = Color.white.opacity(0.82)
     static let overlayStroke = Color.white.opacity(0.44)
@@ -348,6 +350,12 @@ struct MainWidgetView: View {
         let incompleteManualUnknownRewards = store.manualUnknownRewards.filter { !$0.isClaimed }
         let completedManualUnknownRewards = store.manualUnknownRewards.filter(\.isClaimed)
 
+        let incompleteDailyRewards = store.dailyExtraRewards.filter { !$0.isClaimed }
+        let completedDailyRewards = store.dailyExtraRewards.filter(\.isClaimed)
+
+        let incompleteDailyProgresses = store.dailyProgresses.filter { !$0.isCompleted }
+        let completedDailyProgresses = store.dailyProgresses.filter(\.isCompleted)
+
         let incompleteProgressItems = [store.secretPassProgress, store.miniGameProgress]
             .filter { !$0.isCompleted }
         let completedProgressItems = [store.secretPassProgress, store.miniGameProgress]
@@ -357,6 +365,12 @@ struct MainWidgetView: View {
             sectionTitle("额外记录")
 
             ForEach(incompleteTrialRewards) { reward in
+                RewardRowView(reward: reward) {
+                    store.toggle(reward)
+                }
+            }
+
+            ForEach(incompleteDailyRewards) { reward in
                 RewardRowView(reward: reward) {
                     store.toggle(reward)
                 }
@@ -374,7 +388,25 @@ struct MainWidgetView: View {
                 manualProgressView(for: progress)
             }
 
+            ForEach(incompleteDailyProgresses) { progress in
+                DailyProgressView(
+                    progress: progress,
+                    onTapSlot: { slot in
+                        store.toggleDailyProgressSlot(progress, slot: slot)
+                    },
+                    onToggleCompletion: {
+                        store.completeDailyProgress(progress)
+                    }
+                )
+            }
+
             ForEach(completedTrialRewards) { reward in
+                RewardRowView(reward: reward) {
+                    store.toggle(reward)
+                }
+            }
+
+            ForEach(completedDailyRewards) { reward in
                 RewardRowView(reward: reward) {
                     store.toggle(reward)
                 }
@@ -391,8 +423,19 @@ struct MainWidgetView: View {
             ForEach(completedProgressItems, id: \.id) { progress in
                 manualProgressView(for: progress)
             }
+
+            ForEach(completedDailyProgresses) { progress in
+                DailyProgressView(
+                    progress: progress,
+                    onTapSlot: { slot in
+                        store.toggleDailyProgressSlot(progress, slot: slot)
+                    },
+                    onToggleCompletion: {
+                        store.completeDailyProgress(progress)
+                    }
+                )
+            }
         }
-        .padding(.horizontal, 4)
     }
 
     private var pullPlanSection: some View {
@@ -677,9 +720,8 @@ private struct RewardRowView: View {
     var body: some View {
         Button(action: onClaim) {
             HStack(spacing: 10) {
-                Image(systemName: reward.isClaimed ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(reward.isClaimed ? WidgetPalette.pink : WidgetPalette.unchecked)
+                RewardCircle(isFilled: reward.isClaimed)
+                    .frame(width: 24, height: 24)
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
@@ -696,6 +738,7 @@ private struct RewardRowView: View {
 
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(11)
             .widgetRoundedCard(fill: reward.isClaimed ? Color.white.opacity(0.10) : Color.white.opacity(0.18))
         }
@@ -711,9 +754,7 @@ private struct ManualUnknownRewardRowView: View {
     var body: some View {
         HStack(spacing: 10) {
             Button(action: onClaim) {
-                Image(systemName: reward.isClaimed ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(reward.isClaimed ? WidgetPalette.pink : WidgetPalette.unchecked)
+                RewardCircle(isFilled: reward.isClaimed)
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)
@@ -748,8 +789,11 @@ private struct ManualUnknownRewardRowView: View {
                 .buttonStyle(.plain)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(11)
-        .widgetRoundedCard(fill: Color.white.opacity(0.16))
+        .widgetRoundedCard(
+            fill: reward.isClaimed ? Color.white.opacity(0.10) : Color.white.opacity(0.18)
+        )
     }
 }
 
@@ -827,13 +871,7 @@ private struct SecretPassProgressView: View {
                     Button(action: {
                         onTapSlot(slot)
                     }) {
-                        Image(systemName: slot.isClaimed ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(
-                                slot.isClaimed
-                                    ? WidgetPalette.pink
-                                    : WidgetPalette.unchecked
-                            )
+                        RewardCircle(isFilled: slot.isClaimed)
                             .frame(width: 24, height: 24)
                     }
                     .buttonStyle(.plain)
@@ -846,8 +884,144 @@ private struct SecretPassProgressView: View {
                     .foregroundStyle(WidgetPalette.accentSoft)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(11)
         .widgetRoundedCard(fill: Color.white.opacity(0.16))
+    }
+}
+
+private struct RewardCircle: View {
+    let isFilled: Bool
+    let color: Color
+    let unfilledColor: Color
+    let label: String?
+
+    init(
+        isFilled: Bool,
+        color: Color = WidgetPalette.pink,
+        unfilledColor: Color = WidgetPalette.unchecked,
+        label: String? = nil
+    ) {
+        self.isFilled = isFilled
+        self.color = color
+        self.unfilledColor = unfilledColor
+        self.label = label
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(isFilled ? color : Color.clear)
+
+            Circle()
+                .strokeBorder(isFilled ? color : unfilledColor, lineWidth: 1.5)
+
+            if let label {
+                Text(label)
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(isFilled ? Color.white : unfilledColor)
+            } else if isFilled {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color.white)
+            }
+        }
+        .frame(width: 18, height: 18)
+        .contentShape(Circle())
+    }
+}
+
+private struct DailyProgressView: View {
+    let progress: DailyProgress
+    let onTapSlot: (DailyProgressSlot) -> Void
+    let onToggleCompletion: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ForEach(progress.slots) { slot in
+                slotButton(slot)
+            }
+
+            Text(progress.title)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(WidgetPalette.titlePrimary)
+
+            Spacer(minLength: 0)
+
+            if progress.display == .value {
+                Text(progress.claimedValue.inlineDescription(withPlusSign: true))
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(WidgetPalette.accent)
+            }
+
+            if progress.display == .count,
+               progress.slots.contains(where: \.canComplete) {
+                completionButton
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(11)
+        .widgetRoundedCard(fill: Color.white.opacity(0.16))
+    }
+
+    private func slotButton(_ slot: DailyProgressSlot) -> some View {
+        Button {
+            onTapSlot(slot)
+        } label: {
+            RewardCircle(
+                isFilled: slot.isDisplayedClaimed,
+                color: fillColor(for: slot),
+                unfilledColor: color(for: slot.tint),
+                label: progress.display == .value
+                    ? "\(slot.value.crystals)"
+                    : "\(slot.isCompletionClaimed ? 0 : slot.count)"
+            )
+        }
+        .buttonStyle(.plain)
+        .frame(width: 24, height: 24)
+        .contentShape(Circle())
+    }
+
+    private var completionButton: some View {
+        Button {
+            onToggleCompletion()
+        } label: {
+            Text("完成")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(WidgetPalette.accentSoft)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.20))
+                )
+                .overlay {
+                    Capsule(style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .contentShape(Capsule(style: .continuous))
+    }
+
+    private func color(for tint: DailyProgressTint) -> Color {
+        switch tint {
+        case .neutral:
+            return WidgetPalette.unchecked
+        case .orange:
+            return WidgetPalette.progressOrange
+        case .purple:
+            return WidgetPalette.progressPurple
+        }
+    }
+
+    private func fillColor(for slot: DailyProgressSlot) -> Color {
+        switch slot.tint {
+        case .neutral:
+            return WidgetPalette.pink
+        case .orange, .purple:
+            return color(for: slot.tint)
+        }
     }
 }
 
@@ -869,9 +1043,11 @@ private struct PullPlanBannerCardView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Button(action: onToggleBanner) {
-                Image(systemName: progress == .none ? "circle" : "checkmark.circle.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(circleColor)
+                RewardCircle(
+                    isFilled: progress != .none,
+                    color: circleColor,
+                    unfilledColor: circleColor
+                )
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)
@@ -930,6 +1106,7 @@ private struct PullPlanBannerCardView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(11)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)

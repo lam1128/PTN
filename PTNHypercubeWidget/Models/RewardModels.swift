@@ -167,6 +167,78 @@ struct ManualUnknownReward: Identifiable, Hashable {
     let isClaimed: Bool
 }
 
+enum DailyProgressDisplay: String, Hashable {
+    case value
+    case count
+}
+
+enum DailyProgressTint: String, Hashable {
+    case neutral
+    case orange
+    case purple
+}
+
+struct DailyProgressSlotDefinition: Hashable {
+    let id: String
+    let value: RewardValue
+    let maxCount: Int
+    let tint: DailyProgressTint
+    let completionBonus: RewardValue
+}
+
+struct DailyProgressSlot: Identifiable, Hashable {
+    let id: String
+    let index: Int
+    let value: RewardValue
+    let claimKeys: [String]
+    let count: Int
+    let tint: DailyProgressTint
+    let completionBonus: RewardValue
+    let completionClaimKey: String?
+    let isCompletionClaimed: Bool
+
+    var isClaimed: Bool {
+        count > 0
+    }
+
+    var isComplete: Bool {
+        count == claimKeys.count
+    }
+
+    var canComplete: Bool {
+        isComplete && !isCompletionClaimed && completionClaimKey != nil
+    }
+
+    var isDisplayedClaimed: Bool {
+        isClaimed && !isCompletionClaimed
+    }
+
+    var maxCount: Int {
+        claimKeys.count
+    }
+}
+
+struct DailyProgress: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let slots: [DailyProgressSlot]
+    let display: DailyProgressDisplay
+
+    var isCompleted: Bool {
+        display != .count && slots.allSatisfy(\.isComplete)
+    }
+
+    var claimedValue: RewardValue {
+        slots.reduce(.zero) { partial, slot in
+            partial + RewardValue(
+                crystals: slot.value.crystals * slot.count,
+                blueTickets: slot.value.blueTickets * slot.count,
+                redTickets: slot.value.redTickets * slot.count
+            ) + (slot.isCompletionClaimed ? slot.completionBonus : .zero)
+        }
+    }
+}
+
 struct PullPlanBanner: Identifiable, Hashable {
     let id: String
     let title: String
@@ -304,11 +376,11 @@ struct SecretPassProgress: Hashable {
     }
 
     var displayedClaimedCount: Int {
-        isPremiumPurchased ? claimedCount * 2 : claimedCount
+        claimedCount
     }
 
     var displayedTotalCount: Int {
-        isPremiumPurchased ? slots.count * 2 : slots.count
+        slots.count
     }
 }
 
