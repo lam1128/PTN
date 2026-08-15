@@ -22,6 +22,26 @@ swiftc \
   -o "$EXECUTABLE"
 
 chmod +x "$EXECUTABLE"
+
+cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0//EN">
+<plist version="1.0"><dict>
+<key>CFBundleDisplayName</key><string>异方晶</string>
+<key>CFBundleExecutable</key><string>PTNHypercubeWidget</string>
+<key>CFBundleIdentifier</key><string>com.openai.PTNHypercubeWidget</string>
+<key>CFBundleName</key><string>PTNHypercubeWidget</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>1.0</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
+<key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>LSUIElement</key><true/>
+<key>NSHighResolutionCapable</key><true/>
+<key>NSPrincipalClass</key><string>NSApplication</string>
+</dict></plist>
+PLIST
+
 plutil -lint "$APP_DIR/Contents/Info.plist" >/dev/null
 
 if command -v codesign >/dev/null 2>&1; then
@@ -30,6 +50,12 @@ fi
 
 pkill -x PTNHypercubeWidget >/dev/null 2>&1 || true
 sleep 0.3
-open "$APP_DIR"
+# Refresh Launch Services so the newly generated bundle is the one opened.
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+if [[ -x "$LSREGISTER" ]]; then
+  "$LSREGISTER" -u "$APP_DIR" >/dev/null 2>&1 || true
+  "$LSREGISTER" -f "$APP_DIR" >/dev/null 2>&1 || true
+fi
+open -n "$APP_DIR"
 
 echo "Built standalone app at: $APP_DIR"

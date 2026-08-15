@@ -9,6 +9,8 @@ struct RewardSnapshot {
     let secretPassProgress: SecretPassProgress
     let miniGameProgress: SecretPassProgress
     let redemptionCodeProgress: SecretPassProgress
+    let mainlineSignInProgress: SecretPassProgress
+    let anniversarySignInProgress: SecretPassProgress
 }
 
 struct RewardEngine {
@@ -68,6 +70,16 @@ struct RewardEngine {
                 now: currentDate,
                 claimedKeys: claimedKeys,
                 manualCycleVersions: manualCycleVersions
+            ),
+            mainlineSignInProgress: makeMainlineSignInProgress(
+                now: currentDate,
+                claimedKeys: claimedKeys,
+                manualCycleVersions: manualCycleVersions
+            ),
+            anniversarySignInProgress: makeAnniversarySignInProgress(
+                now: currentDate,
+                claimedKeys: claimedKeys,
+                manualCycleVersions: manualCycleVersions
             )
         )
     }
@@ -113,6 +125,7 @@ struct RewardEngine {
     }
 
     private func permanentRewardPoolTitle(for anchor: PullPlanBanner) -> String {
+        guard anchor.title != "限定池" else { return "周年庆" }
         let matchingBanners = RewardSchedule.pullPlanBanners.filter { banner in
             banner.title == RewardSchedule.activityPoolTitle
                 && banner.startsAt(in: calendar) == anchor.startsAt(in: calendar)
@@ -134,9 +147,10 @@ struct RewardEngine {
     }
 
     private func activePermanentRewardBanners(at date: Date) -> [PullPlanBanner] {
-        // 只依赖活动池类型和实际时间，后续新增活动池会自动继承常驻奖励规则。
+        // 活动池和限定池都可以驱动常驻奖励；限定池归入周年庆特殊周期。
         RewardSchedule.pullPlanBanners.filter { banner in
-            banner.title == RewardSchedule.activityPoolTitle && banner.isActive(at: date, calendar: calendar)
+            (banner.title == RewardSchedule.activityPoolTitle || banner.title == "限定池")
+                && banner.isActive(at: date, calendar: calendar)
         }
     }
 
@@ -145,6 +159,10 @@ struct RewardEngine {
             banner.title == RewardSchedule.activityPoolTitle
                 && banner.startsAt(in: calendar) == anchor.startsAt(in: calendar)
         }
+    }
+
+    private func isEnhancedPermanentRewardPool(_ anchor: PullPlanBanner) -> Bool {
+        anchor.title == "限定池" || permanentRewardPoolBanners(for: anchor).count >= 2
     }
 
     private func permanentRewardWindow(
@@ -241,6 +259,8 @@ struct RewardEngine {
                     value: slotDefinition.value,
                     claimKeys: claimKeys,
                     count: claimKeys.filter { claimedKeys.contains($0) }.count,
+                    rewardValues: slotDefinition.rewardValues,
+                    labels: slotDefinition.labels,
                     tint: slotDefinition.tint,
                     completionBonus: slotDefinition.completionBonus,
                     completionClaimKey: completionClaimKey,
@@ -251,7 +271,8 @@ struct RewardEngine {
                 id: definition.id,
                 title: definition.title,
                 slots: slots,
-                display: definition.display
+                display: definition.display,
+                showsCycleAdvanceButton: definition.showsCycleAdvanceButton
             )
         }
     }
@@ -537,6 +558,131 @@ struct RewardEngine {
         )
     }
 
+    private func makeMainlineSignInProgress(
+        now: Date,
+        claimedKeys: Set<String>,
+        manualCycleVersions: [String: Int]
+    ) -> SecretPassProgress {
+        let definition = RewardSchedule.mainlineSignInDefinition
+        guard let anchor = currentPermanentRewardAnchor(at: now),
+              permanentRewardPoolBanners(for: anchor).count >= 2 else {
+            return makeProgress(
+                id: definition.id,
+                kind: definition.kind,
+                title: definition.title,
+                slotValue: definition.slotValue,
+                slotCount: 0,
+                remainingText: nil,
+                claimedKeys: claimedKeys,
+                manualCycleVersions: manualCycleVersions,
+                isPremiumPurchased: false,
+                showsCycleAdvanceButton: definition.showsCycleAdvanceButton
+            )
+        }
+
+        return makeTimedSignInProgress(
+            definition: definition,
+            anchor: anchor,
+            now: now,
+            claimedKeys: claimedKeys,
+            manualCycleVersions: manualCycleVersions
+        )
+    }
+
+    private func makeAnniversarySignInProgress(
+        now: Date,
+        claimedKeys: Set<String>,
+        manualCycleVersions: [String: Int]
+    ) -> SecretPassProgress {
+        let definition = RewardSchedule.anniversarySignInDefinition
+        guard let anchor = currentPermanentRewardAnchor(at: now),
+              anchor.title == "限定池" else {
+            return makeProgress(
+                id: definition.id,
+                kind: definition.kind,
+                title: definition.title,
+                slotValue: definition.slotValue,
+                slotCount: 0,
+                remainingText: nil,
+                claimedKeys: claimedKeys,
+                manualCycleVersions: manualCycleVersions,
+                isPremiumPurchased: false,
+                showsCycleAdvanceButton: definition.showsCycleAdvanceButton
+            )
+        }
+
+        return makeTimedSignInProgress(
+            definition: definition,
+            anchor: anchor,
+            now: now,
+            claimedKeys: claimedKeys,
+            manualCycleVersions: manualCycleVersions
+        )
+    }
+
+    private func makeTimedSignInProgress(
+        definition: ProgressModuleDefinition,
+        anchor: PullPlanBanner,
+        now: Date,
+        claimedKeys: Set<String>,
+        manualCycleVersions: [String: Int]
+    ) -> SecretPassProgress {
+        let cycleID = "\(definition.id)-\(anchor.id)"
+        let cycleStart = anchor.startsAt(in: calendar)
+        let cycleEnd = anchor.endsAt(in: calendar)
+        let cycleStartDay = DayStamp.from(cycleStart, calendar: calendar)
+        let currentDay = DayStamp.rewardDay(from: now, calendar: calendar)
+        let unlockDays = RewardSchedule.mainlineSignInUnlockDays.map { day in
+            let date = calendar.date(byAdding: .day, value: day - 1, to: cycleStartDay.date(in: calendar)) ?? cycleStartDay.date(in: calendar)
+            return DayStamp.from(date, calendar: calendar)
+        }
+
+        // 主线签到从第九天才出现；周期结束后由当前卡池锚点自动隐藏。
+        guard currentDay >= unlockDays[0] else {
+            return makeProgress(
+                id: cycleID,
+                kind: definition.kind,
+                title: definition.title,
+                slotValue: definition.slotValue,
+                slotCount: 0,
+                remainingText: nil,
+                claimedKeys: claimedKeys,
+                manualCycleVersions: manualCycleVersions,
+                isPremiumPurchased: false,
+                showsCycleAdvanceButton: definition.showsCycleAdvanceButton
+            )
+        }
+
+        let version = manualCycleVersions[cycleID] ?? 0
+        let claimKeys = (1...definition.slotCount).map { index in
+            "\(cycleID)-v\(version)-slot-\(index)"
+        }
+        var unlockedSlots = Set<Int>()
+        if currentDay >= unlockDays[0] {
+            unlockedSlots.insert(1)
+        }
+        if currentDay >= unlockDays[1], claimedKeys.contains(claimKeys[0]) {
+            unlockedSlots.insert(2)
+        }
+        if currentDay >= unlockDays[2], claimedKeys.contains(claimKeys[1]) {
+            unlockedSlots.insert(3)
+        }
+
+        return makeProgress(
+            id: cycleID,
+            kind: definition.kind,
+            title: definition.title,
+            slotValue: definition.slotValue,
+            slotCount: definition.slotCount,
+            remainingText: remainingText(until: cycleEnd, now: now, hourSuffix: "时"),
+            claimedKeys: claimedKeys,
+            manualCycleVersions: manualCycleVersions,
+            isPremiumPurchased: false,
+            showsCycleAdvanceButton: definition.showsCycleAdvanceButton,
+            unlockedSlotIndices: unlockedSlots
+        )
+    }
+
     private func makeRedemptionCodeProgress(
         now: Date,
         claimedKeys: Set<String>,
@@ -565,7 +711,7 @@ struct RewardEngine {
             minute: RewardSchedule.redemptionCodeStartMinute
         )
         let end = activeStart.addingTimeInterval(RewardSchedule.redemptionCodeDuration)
-        let slotCount = permanentRewardPoolBanners(for: anchor).count >= 2 ? 3 : 1
+        let slotCount = isEnhancedPermanentRewardPool(anchor) ? 3 : 1
         let cycleID = "\(definition.id)-\(anchor.id)"
 
         guard activeStart <= now, now < end else {
@@ -607,7 +753,8 @@ struct RewardEngine {
         claimedKeys: Set<String>,
         manualCycleVersions: [String: Int],
         isPremiumPurchased: Bool,
-        showsCycleAdvanceButton: Bool
+        showsCycleAdvanceButton: Bool,
+        unlockedSlotIndices: Set<Int>? = nil
     ) -> SecretPassProgress {
         let version = manualCycleVersions[id] ?? 0
         let slots: [SecretPassSlot] = slotCount == 0
@@ -620,7 +767,8 @@ struct RewardEngine {
                     index: index,
                     baseClaimKey: baseClaimKey,
                     premiumClaimKey: premiumClaimKey,
-                    isClaimed: claimedKeys.contains(baseClaimKey)
+                    isClaimed: claimedKeys.contains(baseClaimKey),
+                    isUnlocked: unlockedSlotIndices?.contains(index) ?? true
                 )
             }
 

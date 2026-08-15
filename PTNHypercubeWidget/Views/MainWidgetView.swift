@@ -18,6 +18,7 @@ enum WidgetPalette {
     static let completedSoft = Color(red: 0.35, green: 0.58, blue: 0.53)
     static let progressOrange = Color(red: 0.93, green: 0.50, blue: 0.22)
     static let progressPurple = Color(red: 0.54, green: 0.34, blue: 0.76)
+    static let progressBlue = Color(red: 0.24, green: 0.54, blue: 0.82)
     static let cardCompletedFill = Color(red: 0.83, green: 0.95, blue: 0.91).opacity(0.34)
     static let overlayFill = Color.white.opacity(0.82)
     static let overlayStroke = Color.white.opacity(0.44)
@@ -105,16 +106,6 @@ struct MainWidgetView: View {
                         )
                     )
 
-                if isUpListExpanded {
-                    Rectangle()
-                        .fill(Color.black.opacity(0.001))
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            isUpListExpanded = false
-                            NSApp.keyWindow?.makeFirstResponder(nil)
-                        }
-                }
-
                 VStack(alignment: .leading, spacing: 0) {
                     VStack(alignment: .leading, spacing: 10) {
                         headerSection
@@ -177,6 +168,17 @@ struct MainWidgetView: View {
                 .blur(radius: activeSheet == nil ? 0 : 2)
                 .opacity(activeSheet == nil ? 1 : 0.28)
                 .animation(.easeInOut(duration: 0.14), value: activeSheet)
+
+                if isUpListExpanded {
+                    Rectangle()
+                        .fill(Color.black.opacity(0.001))
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            isUpListExpanded = false
+                            NSApp.keyWindow?.makeFirstResponder(nil)
+                        }
+                        .zIndex(10)
+                }
 
                 if let activeSheet {
                     Color.black.opacity(0.24)
@@ -287,6 +289,7 @@ struct MainWidgetView: View {
             Text(value)
                 .font(.system(size: 30, weight: .bold, design: .rounded))
                 .foregroundStyle(WidgetPalette.titlePrimary)
+                .offset(y: 3)
         }
         .frame(minWidth: 58, alignment: .leading)
     }
@@ -297,14 +300,15 @@ struct MainWidgetView: View {
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .foregroundStyle(WidgetPalette.titleSecondary)
 
-            HStack(spacing: 2) {
-                Text("\(store.totalPlannedUpCount)")
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .foregroundStyle(WidgetPalette.titlePrimary)
+            Button {
+                isUpListExpanded.toggle()
+            } label: {
+                HStack(spacing: 2) {
+                    Text("\(store.totalPlannedUpCount)")
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .foregroundStyle(WidgetPalette.titlePrimary)
+                        .offset(y: -1)
 
-                Button {
-                    isUpListExpanded.toggle()
-                } label: {
                     Image(systemName: isUpListExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(WidgetPalette.accentSoft)
@@ -314,9 +318,10 @@ struct MainWidgetView: View {
                             value: .bounds
                         ) { [$0] }
                 }
-                .buttonStyle(.plain)
-                .padding(.top, 4)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .padding(.top, 4)
         }
         .frame(minWidth: 58, alignment: .leading)
     }
@@ -360,40 +365,70 @@ struct MainWidgetView: View {
             !RewardSchedule.permanentManualSourceOrder.contains($0.id)
         }
         let dailyRewards = store.dailyExtraRewards
-
-        let progressItems = [
-            store.secretPassProgress,
-            store.miniGameProgress
-        ]
+        let regulatoryRewards = dailyRewards.filter { $0.title == RewardSchedule.regulatoryEventTitle }
+        let remainingDailyRewards = dailyRewards.filter { $0.title != RewardSchedule.regulatoryEventTitle }
+        let emotionRewards = extraManualRewards.filter { $0.id == RewardSchedule.emotionRandomSourceID }
+        let dataGapRewards = extraManualRewards.filter { $0.id == RewardSchedule.dataGapManualSourceID }
+        let remainingManualRewards = extraManualRewards.filter {
+            $0.id != RewardSchedule.emotionRandomSourceID
+                && $0.id != RewardSchedule.dataGapManualSourceID
+        }
+        let remainingProgressItems = [store.miniGameProgress, store.anniversarySignInProgress]
             .filter { !$0.slots.isEmpty }
 
         return VStack(alignment: .leading, spacing: 10) {
             sectionTitle("额外记录")
 
+            ForEach(regulatoryRewards) { reward in
+                rewardRow(reward)
+            }
+
+            ForEach(emotionRewards) { reward in
+                manualRewardRow(reward)
+            }
+
+            if !store.secretPassProgress.slots.isEmpty {
+                manualProgressView(for: store.secretPassProgress)
+            }
+
+            ForEach(dataGapRewards) { reward in
+                manualRewardRow(reward)
+            }
+
+            if !store.mainlineSignInProgress.slots.isEmpty {
+                manualProgressView(for: store.mainlineSignInProgress)
+            }
+
             ForEach(trialRewards) { reward in
-                RewardRowView(reward: reward) {
-                    store.toggle(reward)
-                }
+                rewardRow(reward)
             }
 
-            ForEach(dailyRewards) { reward in
-                RewardRowView(reward: reward) {
-                    store.toggle(reward)
-                }
+            ForEach(remainingDailyRewards) { reward in
+                rewardRow(reward)
             }
 
-            ForEach(extraManualRewards) { reward in
-                ManualUnknownRewardRowView(
-                    reward: reward,
-                    onClaim: { store.toggleManualUnknown(reward) },
-                    onAdvanceCycle: { store.advanceManualCycle(for: reward.id) }
-                )
+            ForEach(remainingManualRewards) { reward in
+                manualRewardRow(reward)
             }
 
-            ForEach(progressItems, id: \.id) { progress in
+            ForEach(remainingProgressItems, id: \.id) { progress in
                 manualProgressView(for: progress)
             }
         }
+    }
+
+    private func rewardRow(_ reward: RewardItem) -> some View {
+        RewardRowView(reward: reward) {
+            store.toggle(reward)
+        }
+    }
+
+    private func manualRewardRow(_ reward: ManualUnknownReward) -> some View {
+        ManualUnknownRewardRowView(
+            reward: reward,
+            onClaim: { store.toggleManualUnknown(reward) },
+            onAdvanceCycle: { store.advanceManualCycle(for: reward.id) }
+        )
     }
 
     private var permanentRewardsSection: some View {
@@ -415,8 +450,8 @@ struct MainWidgetView: View {
                     onTapSlot: { slot in
                         store.toggleDailyProgressSlot(progress, slot: slot)
                     },
-                    onToggleCompletion: {
-                        store.completeDailyProgress(progress)
+                    onAdvanceCycle: {
+                        store.advanceDailyProgress(progress)
                     }
                 )
             }
@@ -530,6 +565,10 @@ struct MainWidgetView: View {
                     store.toggleRedemptionCodeSlot(progress, slot: slot)
                 case .miniGame:
                     store.toggleMiniGameSlot(slot)
+                case .mainlineSignIn:
+                    store.toggleMainlineSignInSlot(progress, slot: slot)
+                case .anniversarySignIn:
+                    store.toggleAnniversarySignInSlot(progress, slot: slot)
                 }
             },
             onTogglePremiumPurchased: progress.kind == .secretPass
@@ -824,34 +863,13 @@ private struct SecretPassProgressView: View {
                             )
 
                         if let onTogglePremiumPurchased {
-                            Button {
-                                onTogglePremiumPurchased(!progress.isPremiumPurchased)
-                            } label: {
-                                Text(progress.isPremiumPurchased ? "高级已购" : "高级")
-                                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                                    .foregroundStyle(
-                                        progress.isCompleted
-                                            ? WidgetPalette.claimed
-                                            : progress.isPremiumPurchased
-                                            ? WidgetPalette.pinkStrong
-                                            : WidgetPalette.accentSoft
-                                    )
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 4)
-                                    .background(
-                                        Capsule(style: .continuous)
-                                            .fill(
-                                                progress.isPremiumPurchased
-                                                    ? Color.white.opacity(0.28)
-                                                    : Color.white.opacity(0.20)
-                                            )
-                                    )
-                                    .overlay {
-                                        Capsule(style: .continuous)
-                                            .strokeBorder(Color.white.opacity(progress.isPremiumPurchased ? 0.0 : 0.28), lineWidth: 1)
-                                    }
-                            }
-                            .buttonStyle(.plain)
+                            RewardActionButton(
+                                title: progress.isPremiumPurchased ? "高级已购" : "高级",
+                                isEnabled: true,
+                                isSelected: progress.isPremiumPurchased,
+                                color: progress.isCompleted ? WidgetPalette.claimed : nil,
+                                action: { onTogglePremiumPurchased(!progress.isPremiumPurchased) }
+                            )
                         }
 
                         Spacer(minLength: 0)
@@ -891,6 +909,7 @@ private struct SecretPassProgressView: View {
                             .frame(width: 24, height: 24)
                     }
                     .buttonStyle(.plain)
+                    .disabled(!slot.isUnlocked)
                 }
 
                 Spacer(minLength: 0)
@@ -920,6 +939,58 @@ private struct ManualResetButton: View {
                 .foregroundStyle(WidgetPalette.accent)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct RewardActionButton: View {
+    let title: String
+    let isEnabled: Bool
+    let isSelected: Bool
+    let color: Color?
+    let action: () -> Void
+
+    init(
+        title: String,
+        isEnabled: Bool,
+        isSelected: Bool = false,
+        color: Color? = nil,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.isEnabled = isEnabled
+        self.isSelected = isSelected
+        self.color = color
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(foregroundColor)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(isSelected ? 0.28 : 0.20))
+                )
+                .overlay {
+                    Capsule(style: .continuous)
+                        .strokeBorder(Color.white.opacity(isSelected ? 0.0 : 0.28), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .contentShape(Capsule(style: .continuous))
+    }
+
+    private var foregroundColor: Color {
+        if let color {
+            return color
+        }
+        return isEnabled
+            ? isSelected ? WidgetPalette.pinkStrong : WidgetPalette.accentSoft
+            : WidgetPalette.accentSoft.opacity(0.42)
     }
 }
 
@@ -967,29 +1038,34 @@ private struct RewardCircle: View {
 private struct DailyProgressView: View {
     let progress: DailyProgress
     let onTapSlot: (DailyProgressSlot) -> Void
-    let onToggleCompletion: () -> Void
+    let onAdvanceCycle: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            ForEach(progress.slots) { slot in
-                slotButton(slot)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(progress.title)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(WidgetPalette.titlePrimary)
+
+                Spacer(minLength: 0)
+
+                if progress.showsCycleAdvanceButton {
+                    ManualResetButton(action: onAdvanceCycle)
+                }
             }
 
-            Text(progress.title)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(WidgetPalette.titlePrimary)
+            HStack(spacing: 10) {
+                ForEach(progress.slots) { slot in
+                    slotButton(slot)
+                }
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
 
-            if progress.display == .value {
-                Text(progress.claimedValue.inlineDescription(withPlusSign: true))
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(WidgetPalette.accent)
-            }
-
-            if progress.display == .count,
-               progress.slots.contains(where: \.canComplete) {
-                completionButton
+                if progress.display == .value, !progress.showsCycleAdvanceButton {
+                    Text(progress.claimedValue.inlineDescription(withPlusSign: true))
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(WidgetPalette.accent)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1006,35 +1082,13 @@ private struct DailyProgressView: View {
                 color: fillColor(for: slot),
                 unfilledColor: color(for: slot.tint),
                 label: progress.display == .value
-                    ? "\(slot.value.crystals)"
+                    ? slot.displayLabel ?? "\(slot.value.crystals)"
                     : "\(slot.isCompletionClaimed ? 0 : slot.count)"
             )
         }
         .buttonStyle(.plain)
         .frame(width: 24, height: 24)
         .contentShape(Circle())
-    }
-
-    private var completionButton: some View {
-        Button {
-            onToggleCompletion()
-        } label: {
-            Text("完成")
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundStyle(WidgetPalette.accentSoft)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(Color.white.opacity(0.20))
-                )
-                .overlay {
-                    Capsule(style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
-                }
-        }
-        .buttonStyle(.plain)
-        .contentShape(Capsule(style: .continuous))
     }
 
     private func color(for tint: DailyProgressTint) -> Color {
@@ -1045,6 +1099,8 @@ private struct DailyProgressView: View {
             return WidgetPalette.progressOrange
         case .purple:
             return WidgetPalette.progressPurple
+        case .blue:
+            return WidgetPalette.progressBlue
         }
     }
 
@@ -1052,7 +1108,7 @@ private struct DailyProgressView: View {
         switch slot.tint {
         case .neutral:
             return WidgetPalette.pink
-        case .orange, .purple:
+        case .orange, .purple, .blue:
             return color(for: slot.tint)
         }
     }
@@ -1444,7 +1500,7 @@ private struct UpListEntry: Identifiable {
 }
 
 private struct UpChevronAnchorPreferenceKey: PreferenceKey {
-    static var defaultValue: [Anchor<CGRect>] = []
+    static let defaultValue: [Anchor<CGRect>] = []
 
     static func reduce(value: inout [Anchor<CGRect>], nextValue: () -> [Anchor<CGRect>]) {
         value.append(contentsOf: nextValue())

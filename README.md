@@ -1,24 +1,21 @@
 # PTN
 
-《无期迷途》异方晶桌面小组件，适用于 macOS。
+《无期迷途》异方晶 macOS 桌面小组件。
 
-## 安装
+## 安装运行
 
-1. 下载仓库源码。
-2. 打开终端，进入项目目录。
-3. 运行：
-
-```bash
-cd /Users/admin/Developer/5732
-./build-standalone-app.sh
-```
-
-4. 编译完成后，会自动打开小组件。
-5. 生成的应用位置：
+1. 下载仓库源码并进入项目目录。
+2. 运行：
 
 ```bash
-dist/PTNHypercubeWidget.app
+./build-release-app.sh
 ```
+
+3. 脚本会生成并打开 `dist/PTNHypercubeWidget.app`。
+4. 以后可直接双击这个 `.app`，不需要打开 VS Code 或重新编译。
+5. 如需移动到应用程序文件夹，可将 `.app` 拖入 macOS 的“应用程序”。
+
+## 功能
 
 ## 备注
 

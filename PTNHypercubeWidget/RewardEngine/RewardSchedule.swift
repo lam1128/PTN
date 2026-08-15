@@ -45,6 +45,21 @@ struct DailyProgressDefinition: Identifiable, Hashable {
     let title: String
     let slots: [DailyProgressSlotDefinition]
     let display: DailyProgressDisplay
+    let showsCycleAdvanceButton: Bool
+
+    init(
+        id: String,
+        title: String,
+        slots: [DailyProgressSlotDefinition],
+        display: DailyProgressDisplay,
+        showsCycleAdvanceButton: Bool = false
+    ) {
+        self.id = id
+        self.title = title
+        self.slots = slots
+        self.display = display
+        self.showsCycleAdvanceButton = showsCycleAdvanceButton
+    }
 }
 
 enum RewardSchedule {
@@ -95,20 +110,88 @@ enum RewardSchedule {
             slots: [
                 DailyProgressSlotDefinition(
                     id: "orange",
-                    value: RewardValue(crystals: 50),
+                    value: RewardValue(crystals: 80),
+                    rewardValues: [
+                        RewardValue(crystals: 80),
+                        RewardValue(crystals: 80),
+                        RewardValue(crystals: 50),
+                        RewardValue(crystals: 80)
+                    ],
                     maxCount: 4,
                     tint: .orange,
-                    completionBonus: RewardValue(crystals: 90)
+                    completionBonus: .zero
                 ),
                 DailyProgressSlotDefinition(
                     id: "purple",
-                    value: RewardValue(crystals: 50),
+                    value: RewardValue(crystals: 60),
+                    rewardValues: [
+                        RewardValue(crystals: 60),
+                        RewardValue(crystals: 50),
+                        RewardValue(crystals: 60)
+                    ],
                     maxCount: 3,
                     tint: .purple,
-                    completionBonus: RewardValue(crystals: 10)
+                    completionBonus: .zero
                 )
             ],
-            display: .count
+            display: .count,
+            showsCycleAdvanceButton: true
+        ),
+        DailyProgressDefinition(
+            id: "daily-obedience",
+            title: "服从度",
+            slots: [
+                DailyProgressSlotDefinition(
+                    id: "orange-0",
+                    value: RewardValue(crystals: 60),
+                    labels: ["0"],
+                    maxCount: 1,
+                    tint: .orange,
+                    completionBonus: .zero
+                ),
+                DailyProgressSlotDefinition(
+                    id: "orange-40",
+                    value: RewardValue(crystals: 30),
+                    labels: ["40"],
+                    maxCount: 1,
+                    tint: .orange,
+                    completionBonus: .zero
+                ),
+                DailyProgressSlotDefinition(
+                    id: "purple-0",
+                    value: RewardValue(crystals: 20),
+                    labels: ["0"],
+                    maxCount: 1,
+                    tint: .purple,
+                    completionBonus: .zero
+                ),
+                DailyProgressSlotDefinition(
+                    id: "purple-40",
+                    value: RewardValue(crystals: 10),
+                    labels: ["40"],
+                    maxCount: 1,
+                    tint: .purple,
+                    completionBonus: .zero
+                ),
+                DailyProgressSlotDefinition(
+                    id: "blue-0",
+                    value: RewardValue(crystals: 10),
+                    labels: ["0"],
+                    maxCount: 1,
+                    tint: .blue,
+                    completionBonus: .zero
+                ),
+                DailyProgressSlotDefinition(
+                    id: "blue-40",
+                    value: RewardValue(crystals: 5),
+                    labels: ["40"],
+                    maxCount: 1,
+                    tint: .blue,
+                    completionBonus: .zero
+                )
+            ],
+            display: .value,
+            showsCycleAdvanceButton: true
         )
     ]
 
@@ -396,6 +479,25 @@ enum RewardSchedule {
         slotValue: RewardValue(crystals: 50),
         slotCount: 5,
         showsCycleAdvanceButton: true
+    )
+
+    static let mainlineSignInDefinition = ProgressModuleDefinition(
+        kind: .mainlineSignIn,
+        id: "mainline-sign-in",
+        title: "主线签到·主线双狂",
+        slotValue: RewardValue(crystals: 60),
+        slotCount: 3,
+        showsCycleAdvanceButton: false
+    )
+    static let mainlineSignInUnlockDays = [9, 11, 13]
+
+    static let anniversarySignInDefinition = ProgressModuleDefinition(
+        kind: .anniversarySignIn,
+        id: "anniversary-sign-in",
+        title: "周年庆签到·周年庆",
+        slotValue: RewardValue(crystals: 60),
+        slotCount: 3,
+        showsCycleAdvanceButton: false
     )
 
     static let redemptionCodeDefinition = ProgressModuleDefinition(

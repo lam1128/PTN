@@ -7,6 +7,7 @@
 - `RewardEngine/RewardEngine.swift`：根据日期和存档状态生成页面数据，不直接写 UI。
 - `Storage/AppStateStore.swift`：UserDefaults 持久化、领取/取消、库存和历史记录。
 - `Views/MainWidgetView.swift`：页面布局、固定顺序和交互入口。
+- `Package.swift` 与 `script/assemble_app.sh`：独立构建和 `.app` 打包入口。
 
 ## 新增奖励模块
 
@@ -34,4 +35,4 @@ git diff --check
 ./build-standalone-app.sh
 ```
 
-编译脚本会关闭旧进程、生成 `dist/PTNHypercubeWidget.app` 并重新打开应用。重点手动检查：圆点点击与取消、密令高级奖励、垫抽数、滚动位置、倒计时、历史撤销和库存变化。
+发布构建使用 `./build-release-app.sh`，生成的 `.app` 可脱离 VS Code 独立运行。编译脚本会关闭旧进程、生成 `dist/PTNHypercubeWidget.app` 并重新打开应用。重点手动检查：圆点点击与取消、密令高级奖励、垫抽数、滚动位置、倒计时、历史撤销和库存变化。

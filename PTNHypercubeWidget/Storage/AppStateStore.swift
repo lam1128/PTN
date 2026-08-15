@@ -15,6 +15,8 @@ final class AppStateStore: ObservableObject {
     @Published private(set) var secretPassProgress: SecretPassProgress
     @Published private(set) var miniGameProgress: SecretPassProgress
     @Published private(set) var redemptionCodeProgress: SecretPassProgress
+    @Published private(set) var mainlineSignInProgress: SecretPassProgress
+    @Published private(set) var anniversarySignInProgress: SecretPassProgress
     @Published private(set) var hasPremiumSecretPass: Bool
     @Published private(set) var usesExtraTranslucentBackground: Bool
     @Published private(set) var pullPlanBannerProgressRawValues: [String: Int]
@@ -105,6 +107,28 @@ final class AppStateStore: ObservableObject {
             isPremiumPurchased: false,
             showsCycleAdvanceButton: RewardSchedule.redemptionCodeDefinition.showsCycleAdvanceButton
         )
+        self.mainlineSignInProgress = SecretPassProgress(
+            id: RewardSchedule.mainlineSignInDefinition.id,
+            kind: RewardSchedule.mainlineSignInDefinition.kind,
+            title: RewardSchedule.mainlineSignInDefinition.title,
+            slotValue: RewardSchedule.mainlineSignInDefinition.slotValue,
+            cycleVersion: 0,
+            slots: [],
+            remainingText: nil,
+            isPremiumPurchased: false,
+            showsCycleAdvanceButton: RewardSchedule.mainlineSignInDefinition.showsCycleAdvanceButton
+        )
+        self.anniversarySignInProgress = SecretPassProgress(
+            id: RewardSchedule.anniversarySignInDefinition.id,
+            kind: RewardSchedule.anniversarySignInDefinition.kind,
+            title: RewardSchedule.anniversarySignInDefinition.title,
+            slotValue: RewardSchedule.anniversarySignInDefinition.slotValue,
+            cycleVersion: 0,
+            slots: [],
+            remainingText: nil,
+            isPremiumPurchased: false,
+            showsCycleAdvanceButton: RewardSchedule.anniversarySignInDefinition.showsCycleAdvanceButton
+        )
         bootstrapInitialStateIfNeeded()
         refreshRewards()
     }
@@ -173,6 +197,8 @@ final class AppStateStore: ObservableObject {
         secretPassProgress = snapshot.secretPassProgress
         miniGameProgress = snapshot.miniGameProgress
         redemptionCodeProgress = snapshot.redemptionCodeProgress
+        mainlineSignInProgress = snapshot.mainlineSignInProgress
+        anniversarySignInProgress = snapshot.anniversarySignInProgress
     }
 
     func claim(_ reward: RewardItem, now: Date = Date()) {
@@ -230,34 +256,47 @@ final class AppStateStore: ObservableObject {
         let nextCount = slot.count == slot.maxCount ? 0 : slot.count + 1
 
         if nextCount > slot.count {
-            for claimKey in slot.claimKeys[slot.count..<nextCount] {
+            for (offset, claimKey) in slot.claimKeys[slot.count..<nextCount].enumerated() {
                 recordClaim(
                     claimKey: claimKey,
-                    value: slot.value,
+                    value: slot.rewardValues[slot.count + offset],
                     source: "\(progress.title) 第\(slot.index)项",
                     now: now
                 )
             }
         } else {
-            for claimKey in slot.claimKeys[nextCount..<slot.count].reversed() {
-                unclaim(claimKey: claimKey, value: slot.value, now: now)
+            for index in slot.claimKeys[nextCount..<slot.count].indices.reversed() {
+                unclaim(
+                    claimKey: slot.claimKeys[index],
+                    value: slot.rewardValues[index],
+                    now: now
+                )
             }
         }
     }
 
-    func completeDailyProgress(
+    func advanceDailyProgress(
         _ progress: DailyProgress,
         now: Date = Date()
     ) {
-        guard let slot = progress.slots.first(where: \.canComplete),
-              let bonusKey = slot.completionClaimKey else { return }
+        guard progress.showsCycleAdvanceButton else { return }
 
-        recordClaim(
-            claimKey: bonusKey,
-            value: slot.completionBonus,
-            source: "\(progress.title) 第\(slot.index)项完成奖励",
-            now: now
-        )
+        for slot in progress.slots where slot.isComplete {
+            guard let bonusKey = slot.completionClaimKey else { continue }
+            recordClaim(
+                claimKey: bonusKey,
+                value: slot.completionBonus,
+                source: "\(progress.title) 第\(slot.index)项完成奖励",
+                now: now
+            )
+        }
+
+        for slot in progress.slots {
+            dailyCycleVersions[slot.id, default: 0] += 1
+        }
+
+        persist()
+        refreshRewards(now: now)
     }
 
     func claimSecretPassSlot(_ slot: SecretPassSlot, now: Date = Date()) {
@@ -322,6 +361,36 @@ final class AppStateStore: ObservableObject {
             slot,
             value: definition.slotValue,
             source: "\(definition.title) 第\(slot.index)关",
+            now: now
+        )
+    }
+
+    func toggleMainlineSignInSlot(
+        _ progress: SecretPassProgress,
+        slot: SecretPassSlot,
+        now: Date = Date()
+    ) {
+        guard slot.isUnlocked else { return }
+        let definition = RewardSchedule.mainlineSignInDefinition
+        toggleStandardProgressSlot(
+            slot,
+            value: definition.slotValue,
+            source: "\(progress.title) 第\(slot.index)天",
+            now: now
+        )
+    }
+
+    func toggleAnniversarySignInSlot(
+        _ progress: SecretPassProgress,
+        slot: SecretPassSlot,
+        now: Date = Date()
+    ) {
+        guard slot.isUnlocked else { return }
+        let definition = RewardSchedule.anniversarySignInDefinition
+        toggleStandardProgressSlot(
+            slot,
+            value: definition.slotValue,
+            source: "\(progress.title) 第\(slot.index)天",
             now: now
         )
     }

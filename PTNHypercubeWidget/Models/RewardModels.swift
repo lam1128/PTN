@@ -195,14 +195,35 @@ enum DailyProgressTint: String, Hashable {
     case neutral
     case orange
     case purple
+    case blue
 }
 
 struct DailyProgressSlotDefinition: Hashable {
     let id: String
     let value: RewardValue
+    let rewardValues: [RewardValue]
+    let labels: [String]
     let maxCount: Int
     let tint: DailyProgressTint
     let completionBonus: RewardValue
+
+    init(
+        id: String,
+        value: RewardValue,
+        rewardValues: [RewardValue]? = nil,
+        labels: [String] = [],
+        maxCount: Int,
+        tint: DailyProgressTint,
+        completionBonus: RewardValue
+    ) {
+        self.id = id
+        self.value = value
+        self.rewardValues = rewardValues ?? Array(repeating: value, count: maxCount)
+        self.labels = labels
+        self.maxCount = maxCount
+        self.tint = tint
+        self.completionBonus = completionBonus
+    }
 }
 
 struct DailyProgressSlot: Identifiable, Hashable {
@@ -211,6 +232,8 @@ struct DailyProgressSlot: Identifiable, Hashable {
     let value: RewardValue
     let claimKeys: [String]
     let count: Int
+    let rewardValues: [RewardValue]
+    let labels: [String]
     let tint: DailyProgressTint
     let completionBonus: RewardValue
     let completionClaimKey: String?
@@ -235,6 +258,15 @@ struct DailyProgressSlot: Identifiable, Hashable {
     var maxCount: Int {
         claimKeys.count
     }
+
+    var claimedValue: RewardValue {
+        rewardValues.prefix(count).reduce(.zero, +)
+    }
+
+    var displayLabel: String? {
+        guard !labels.isEmpty else { return nil }
+        return labels[min(count, labels.count - 1)]
+    }
 }
 
 struct DailyProgress: Identifiable, Hashable {
@@ -242,6 +274,7 @@ struct DailyProgress: Identifiable, Hashable {
     let title: String
     let slots: [DailyProgressSlot]
     let display: DailyProgressDisplay
+    let showsCycleAdvanceButton: Bool
 
     var isCompleted: Bool {
         display != .count && slots.allSatisfy(\.isComplete)
@@ -249,11 +282,7 @@ struct DailyProgress: Identifiable, Hashable {
 
     var claimedValue: RewardValue {
         slots.reduce(.zero) { partial, slot in
-            partial + RewardValue(
-                crystals: slot.value.crystals * slot.count,
-                blueTickets: slot.value.blueTickets * slot.count,
-                redTickets: slot.value.redTickets * slot.count
-            ) + (slot.isCompletionClaimed ? slot.completionBonus : .zero)
+            partial + slot.claimedValue + (slot.isCompletionClaimed ? slot.completionBonus : .zero)
         }
     }
 }
@@ -374,12 +403,15 @@ struct SecretPassSlot: Identifiable, Hashable {
     let baseClaimKey: String
     let premiumClaimKey: String
     let isClaimed: Bool
+    let isUnlocked: Bool
 }
 
 enum ProgressModuleKind: String, Codable, Hashable {
     case secretPass
     case miniGame
     case redemptionCode
+    case mainlineSignIn
+    case anniversarySignIn
 }
 
 struct ProgressModuleDefinition: Hashable {
