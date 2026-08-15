@@ -345,6 +345,8 @@ struct MainWidgetView: View {
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             } else {
+                AutomaticStorageRowView()
+
                 ForEach(visibleRewards) { reward in
                     RewardRowView(reward: reward) {
                         store.toggle(reward)
@@ -797,6 +799,33 @@ private struct RewardRowView: View {
     }
 }
 
+private struct AutomaticStorageRowView: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            RewardCircle(
+                isFilled: true,
+                color: WidgetPalette.completed,
+                systemImage: "arrow.clockwise",
+                systemImageOffsetY: -1
+            )
+            .frame(width: 24, height: 24)
+
+            Text(RewardSchedule.automaticStorageTitle)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(WidgetPalette.titlePrimary)
+
+            Spacer(minLength: 0)
+
+            Text(RewardSchedule.automaticStorageBatchValue.inlineDescription(withPlusSign: true))
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(WidgetPalette.accent)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(11)
+        .widgetRoundedCard(fill: Color.white.opacity(0.18))
+    }
+}
+
 private struct ManualUnknownRewardRowView: View {
     let reward: ManualUnknownReward
     let onClaim: () -> Void
@@ -999,17 +1028,23 @@ private struct RewardCircle: View {
     let color: Color
     let unfilledColor: Color
     let label: String?
+    let systemImage: String?
+    let systemImageOffsetY: CGFloat
 
     init(
         isFilled: Bool,
         color: Color = WidgetPalette.pink,
         unfilledColor: Color = WidgetPalette.unchecked,
-        label: String? = nil
+        label: String? = nil,
+        systemImage: String? = nil,
+        systemImageOffsetY: CGFloat = 0
     ) {
         self.isFilled = isFilled
         self.color = color
         self.unfilledColor = unfilledColor
         self.label = label
+        self.systemImage = systemImage
+        self.systemImageOffsetY = systemImageOffsetY
     }
 
     var body: some View {
@@ -1025,9 +1060,10 @@ private struct RewardCircle: View {
                     .font(.system(size: 9, weight: .bold, design: .rounded))
                     .foregroundStyle(isFilled ? Color.white : unfilledColor)
             } else if isFilled {
-                Image(systemName: "checkmark")
+                Image(systemName: systemImage ?? "checkmark")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(Color.white)
+                    .offset(y: systemImageOffsetY)
             }
         }
         .frame(width: 18, height: 18)

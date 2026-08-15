@@ -46,6 +46,7 @@ final class AppStateStore: ObservableObject {
         static let pullPlanPityValues = "ptn.pullPlanPityValues"
         static let usesExtraTranslucentBackground = "ptn.usesExtraTranslucentBackground"
         static let hasPremiumSecretPass = "ptn.hasPremiumSecretPass"
+        static let automaticStorageLastUpdateAt = "ptn.automaticStorageLastUpdateAt"
     }
 
     init(
@@ -182,6 +183,7 @@ final class AppStateStore: ObservableObject {
     }
 
     func refreshRewards(now: Date = Date()) {
+        applyAutomaticStorage(now: now)
         let snapshot = rewardEngine.snapshot(
             on: now,
             claimedKeys: claimedRewardKeys,
@@ -537,9 +539,14 @@ final class AppStateStore: ObservableObject {
     }
 
     func undoLatestHistoryEntry(now: Date = Date()) {
-        guard let latest = history.first else { return }
+        guard let index = history.firstIndex(where: { entry in
+            guard let claimKey = entry.claimKey else { return true }
+            return !claimKey.hasPrefix(RewardSchedule.automaticStorageHistoryKey)
+        }) else {
+            return
+        }
 
-        history.removeFirst()
+        let latest = history.remove(at: index)
         revert(value: latest.value)
 
         if let claimKey = latest.claimKey {
@@ -608,6 +615,39 @@ final class AppStateStore: ObservableObject {
         totalCrystals += value.crystals
         totalBlueTickets += value.blueTickets
         totalRedTickets += value.redTickets
+    }
+
+    private func applyAutomaticStorage(now: Date) {
+        let key = StorageKey.automaticStorageLastUpdateAt
+        let lastUpdate = defaults.object(forKey: key) as? Date ?? now
+        let elapsed = now.timeIntervalSince(lastUpdate)
+        let interval = RewardSchedule.automaticStorageInterval
+        let completedCycles = max(0, Int(floor(elapsed / interval)))
+
+        if completedCycles > 0 {
+            let value = RewardSchedule.automaticStorageBatchValue
+            let totalValue = RewardValue(
+                crystals: value.crystals * completedCycles,
+                blueTickets: value.blueTickets * completedCycles,
+                redTickets: value.redTickets * completedCycles
+            )
+            apply(value: totalValue)
+            for cycle in 0..<completedCycles {
+                history.insert(
+                    HistoryEntry(
+                        timestamp: lastUpdate.addingTimeInterval(interval * Double(cycle + 1)),
+                        source: RewardSchedule.automaticStorageTitle,
+                        value: value,
+                        claimKey: RewardSchedule.automaticStorageHistoryKey
+                    ),
+                    at: 0
+                )
+            }
+            defaults.set(lastUpdate.addingTimeInterval(interval * Double(completedCycles)), forKey: key)
+            persist()
+        } else if defaults.object(forKey: key) == nil {
+            defaults.set(now, forKey: key)
+        }
     }
 
     private func revert(value: RewardValue) {

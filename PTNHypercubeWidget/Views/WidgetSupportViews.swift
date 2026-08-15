@@ -114,6 +114,7 @@ private final class ClearBackgroundTextField: NSTextField {
     }
 }
 
+@MainActor
 struct ManagedScrollView<Content: View>: NSViewRepresentable {
     @Binding var scrollOffset: CGFloat
     @ViewBuilder let content: Content
@@ -148,11 +149,11 @@ struct ManagedScrollView<Content: View>: NSViewRepresentable {
         context.coordinator.restoreScrollPositionIfNeeded()
     }
 
+    @MainActor
     final class Coordinator: NSObject {
         @Binding private var scrollOffset: CGFloat
         weak var scrollView: NSScrollView?
         weak var hostingView: NSHostingView<Content>?
-        private var boundsObserver: NSObjectProtocol?
         private var isRestoringScrollPosition = false
 
         init(scrollOffset: Binding<CGFloat>) {
@@ -160,24 +161,25 @@ struct ManagedScrollView<Content: View>: NSViewRepresentable {
         }
 
         deinit {
-            if let boundsObserver {
-                NotificationCenter.default.removeObserver(boundsObserver)
-            }
+            NotificationCenter.default.removeObserver(self)
         }
 
         func attach(to scrollView: NSScrollView, hostingView: NSHostingView<Content>) {
             self.scrollView = scrollView
             self.hostingView = hostingView
 
-            boundsObserver = NotificationCenter.default.addObserver(
-                forName: NSView.boundsDidChangeNotification,
-                object: scrollView.contentView,
-                queue: .main
-            ) { [weak self] _ in
-                guard let self, !self.isRestoringScrollPosition else { return }
-                self.scrollOffset = scrollView.contentView.bounds.origin.y
-                NSApp.keyWindow?.makeFirstResponder(nil)
-            }
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(boundsDidChange(_:)),
+                name: NSView.boundsDidChangeNotification,
+                object: scrollView.contentView
+            )
+        }
+
+        @objc private func boundsDidChange(_ notification: Notification) {
+            guard !isRestoringScrollPosition, let scrollView else { return }
+            scrollOffset = scrollView.contentView.bounds.origin.y
+            NSApp.keyWindow?.makeFirstResponder(nil)
         }
 
         func updateLayout() {

@@ -56,6 +56,6 @@ if [[ -x "$LSREGISTER" ]]; then
   "$LSREGISTER" -u "$APP_DIR" >/dev/null 2>&1 || true
   "$LSREGISTER" -f "$APP_DIR" >/dev/null 2>&1 || true
 fi
-open -n "$APP_DIR"
+/usr/bin/open -n "$APP_DIR"
 
 echo "Built standalone app at: $APP_DIR"

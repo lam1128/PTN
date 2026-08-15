@@ -163,6 +163,7 @@ struct HistorySheetView: View {
 }
 
 @ViewBuilder
+@MainActor
 private func panelHeader(_ title: String, onClose: @escaping () -> Void) -> some View {
     HStack {
         Text(title)

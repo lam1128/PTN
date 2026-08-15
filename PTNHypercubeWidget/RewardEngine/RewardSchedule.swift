@@ -196,9 +196,13 @@ enum RewardSchedule {
     ]
 
     static let dailySources: [RewardSourceDefinition] = [
-        RewardSourceDefinition(id: "daily-inspection", title: "每日监察任务", value: RewardValue(crystals: 40)),
-        RewardSourceDefinition(id: "daily-base", title: "基地监管", value: RewardValue(crystals: 24))
+        RewardSourceDefinition(id: "daily-inspection", title: "每日监察任务", value: RewardValue(crystals: 40))
     ]
+
+    static let automaticStorageTitle = "基地监管"
+    static let automaticStorageBatchValue = RewardValue(crystals: 4)
+    static let automaticStorageInterval: TimeInterval = 3 * 60 * 60 + 50 * 60 + 24
+    static let automaticStorageHistoryKey = "automatic-storage"
 
     static let weeklySources: [RewardSourceDefinition] = [
         RewardSourceDefinition(id: "weekly-inspection", title: "周监察任务", value: RewardValue(crystals: 150)),
