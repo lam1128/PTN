@@ -8,17 +8,11 @@ EXECUTABLE="$APP_DIR/Contents/MacOS/PTNHypercubeWidget"
 MODULE_CACHE="/private/tmp/swift-module-cache"
 
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources" "$MODULE_CACHE"
+SWIFT_SOURCES=("$ROOT_DIR"/PTNHypercubeWidget/**/*.swift(N))
 
 swiftc \
   -module-cache-path "$MODULE_CACHE" \
-  "$ROOT_DIR/PTNHypercubeWidget/App/PTNHypercubeWidgetApp.swift" \
-  "$ROOT_DIR/PTNHypercubeWidget/Models/RewardModels.swift" \
-  "$ROOT_DIR/PTNHypercubeWidget/RewardEngine/RewardSchedule.swift" \
-  "$ROOT_DIR/PTNHypercubeWidget/RewardEngine/RewardEngine.swift" \
-  "$ROOT_DIR/PTNHypercubeWidget/Storage/AppStateStore.swift" \
-  "$ROOT_DIR/PTNHypercubeWidget/Views/MainWidgetView.swift" \
-  "$ROOT_DIR/PTNHypercubeWidget/Views/WidgetSupportViews.swift" \
-  "$ROOT_DIR/PTNHypercubeWidget/Views/Sheets.swift" \
+  "${SWIFT_SOURCES[@]}" \
   -o "$EXECUTABLE"
 
 chmod +x "$EXECUTABLE"
@@ -56,6 +50,9 @@ if [[ -x "$LSREGISTER" ]]; then
   "$LSREGISTER" -u "$APP_DIR" >/dev/null 2>&1 || true
   "$LSREGISTER" -f "$APP_DIR" >/dev/null 2>&1 || true
 fi
-/usr/bin/open -n "$APP_DIR"
+if ! /usr/bin/open -n "$APP_DIR"; then
+  # Launch the freshly built executable if Launch Services has not indexed the bundle yet.
+  "$EXECUTABLE" >/dev/null 2>&1 &
+fi
 
 echo "Built standalone app at: $APP_DIR"

@@ -20,11 +20,16 @@ enum WidgetPalette {
     static let progressPurple = Color(red: 0.54, green: 0.34, blue: 0.76)
     static let progressBlue = Color(red: 0.24, green: 0.54, blue: 0.82)
     static let cardCompletedFill = Color(red: 0.83, green: 0.95, blue: 0.91).opacity(0.34)
-    static let overlayFill = Color.white.opacity(0.82)
-    static let overlayStroke = Color.white.opacity(0.44)
+    static let overlayFill = Color.white.opacity(0.58)
+    static let overlayStroke = Color.white.opacity(0.62)
     static let cardStroke = Color.white.opacity(0.34)
     static let capsuleStroke = Color.white.opacity(0.30)
     static let pityBorder = Color(red: 0.82, green: 0.56, blue: 0.67)
+}
+
+private enum WidgetPopupLayer {
+    static let dismissArea: Double = 10
+    static let popup: Double = 20
 }
 
 private extension View {
@@ -43,34 +48,108 @@ private extension View {
         }
     }
 
-    func widgetOverlayPanelCard() -> some View {
+    func widgetOverlayPanelCard(
+        cornerRadius: CGFloat = 22,
+        fill: Color = WidgetPalette.overlayFill
+    ) -> some View {
         background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(.ultraThinMaterial)
         )
         .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(WidgetPalette.overlayFill)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(fill)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(WidgetPalette.overlayStroke, lineWidth: 1)
         }
     }
 }
 
+private struct WidgetPopupContainer<Content: View>: View {
+    let cornerRadius: CGFloat
+    let fill: Color
+    let shadowColor: Color
+    let shadowRadius: CGFloat
+    let shadowY: CGFloat
+    @ViewBuilder let content: Content
+
+    init(
+        cornerRadius: CGFloat = 22,
+        fill: Color = WidgetPalette.overlayFill,
+        shadowColor: Color = Color.black.opacity(0.08),
+        shadowRadius: CGFloat = 14,
+        shadowY: CGFloat = 6,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.cornerRadius = cornerRadius
+        self.fill = fill
+        self.shadowColor = shadowColor
+        self.shadowRadius = shadowRadius
+        self.shadowY = shadowY
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .widgetOverlayPanelCard(cornerRadius: cornerRadius, fill: fill)
+            .shadow(color: shadowColor, radius: shadowRadius, y: shadowY)
+    }
+}
+
+private struct PopupChevronIcon: View {
+    enum Style {
+        case summary
+        case module
+
+        var fontSize: CGFloat {
+            switch self {
+            case .summary: return 11
+            case .module: return 9
+            }
+        }
+
+        var hitSize: CGFloat {
+            switch self {
+            case .summary: return 24
+            case .module: return 30
+            }
+        }
+    }
+
+    let isExpanded: Bool
+    let color: Color
+    var style: Style = .module
+
+    var body: some View {
+        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+            .font(.system(size: style.fontSize, weight: .bold))
+            .foregroundStyle(color)
+            .frame(width: style.hitSize, height: style.hitSize)
+            .contentShape(Rectangle())
+            .padding(.horizontal, (16 - style.hitSize) / 2)
+            .padding(.vertical, (24 - style.hitSize) / 2)
+    }
+}
+
 struct MainWidgetView: View {
     @ObservedObject var store: AppStateStore
+    @StateObject private var giftCodeStore = GiftCodeStore()
+    @StateObject private var pullPlanSyncStore = PullPlanSyncStore()
 
     @State private var activeSheet: ActiveSheet?
     @State private var selectedPrimarySection: PrimarySection = .currentPeriod
     @State private var expandedPullPlanBannerIDs: Set<String> = []
     @State private var isUpListExpanded = false
+    @State private var isGiftCodeListExpanded = false
     @State private var currentPeriodScrollOffset: CGFloat = 0
     @State private var permanentRewardsScrollOffset: CGFloat = 0
     @State private var pullPlanScrollOffset: CGFloat = 0
+    @State private var pullPlanRecordScrollOffset: CGFloat = 0
     private let refreshTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
     private let upPopupWidth: CGFloat = 150
+    private let giftCodePopupWidth: CGFloat = 260
 
     var body: some View {
         GeometryReader { geometry in
@@ -162,6 +241,16 @@ struct MainWidgetView: View {
                                 .padding(.top, 14)
                                 .padding(.bottom, 16)
                             }
+                        case .pullPlanRecords:
+                            ManagedScrollView(scrollOffset: $pullPlanRecordScrollOffset) {
+                                VStack(alignment: .leading, spacing: 14) {
+                                    pullPlanRecordSection
+                                    footerSection
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.top, 14)
+                                .padding(.bottom, 16)
+                            }
                         }
                     }
                 }
@@ -169,15 +258,16 @@ struct MainWidgetView: View {
                 .opacity(activeSheet == nil ? 1 : 0.28)
                 .animation(.easeInOut(duration: 0.14), value: activeSheet)
 
-                if isUpListExpanded {
+                if isUpListExpanded || isGiftCodeListExpanded {
                     Rectangle()
                         .fill(Color.black.opacity(0.001))
                         .contentShape(Rectangle())
                         .onTapGesture {
                             isUpListExpanded = false
+                            isGiftCodeListExpanded = false
                             NSApp.keyWindow?.makeFirstResponder(nil)
                         }
-                        .zIndex(10)
+                        .zIndex(WidgetPopupLayer.dismissArea)
                 }
 
                 if let activeSheet {
@@ -202,7 +292,28 @@ struct MainWidgetView: View {
                                 x: proxy[anchor].minX - 3,
                                 y: proxy[anchor].minY + 20
                             )
-                            .zIndex(20)
+                            .zIndex(WidgetPopupLayer.popup)
+                    }
+                }
+            }
+            .overlayPreferenceValue(GiftCodeChevronAnchorPreferenceKey.self) { anchors in
+                GeometryReader { proxy in
+                    if isGiftCodeListExpanded, let anchor = anchors.first {
+                        let frame = proxy[anchor]
+                        giftCodeListPopup
+                            .offset(
+                                x: popupOriginX(
+                                    anchorX: frame.minX,
+                                    popupWidth: giftCodePopupWidth,
+                                    totalWidth: proxy.size.width
+                                ),
+                                y: popupOriginY(
+                                    anchor: frame,
+                                    popupHeight: giftCodePopupHeight,
+                                    totalHeight: proxy.size.height
+                                )
+                            )
+                            .zIndex(WidgetPopupLayer.popup)
                     }
                 }
             }
@@ -222,9 +333,16 @@ struct MainWidgetView: View {
         .frame(width: 340, height: 430)
         .onAppear {
             store.refreshRewards()
+            giftCodeStore.refreshIfNeeded()
+            pullPlanSyncStore.refreshIfNeeded()
         }
         .onReceive(refreshTimer) { now in
             store.refreshRewards(now: now)
+            giftCodeStore.refreshIfNeeded(now: now)
+            pullPlanSyncStore.refreshIfNeeded(now: now)
+        }
+        .onChange(of: pullPlanSyncStore.revision) {
+            store.refreshRewards()
         }
         .animation(.easeInOut(duration: 0.16), value: activeSheet)
     }
@@ -256,6 +374,7 @@ struct MainWidgetView: View {
                     } label: {
                         Image(systemName: "square.and.pencil")
                             .font(.system(size: 14, weight: .semibold))
+                            .offset(x: -1)
                             .frame(width: 30, height: 30)
                             .background(Color.white.opacity(0.34), in: Circle())
                             .foregroundStyle(WidgetPalette.accentSoft)
@@ -301,6 +420,7 @@ struct MainWidgetView: View {
                 .foregroundStyle(WidgetPalette.titleSecondary)
 
             Button {
+                isGiftCodeListExpanded = false
                 isUpListExpanded.toggle()
             } label: {
                 HStack(spacing: 2) {
@@ -309,10 +429,11 @@ struct MainWidgetView: View {
                         .foregroundStyle(WidgetPalette.titlePrimary)
                         .offset(y: -1)
 
-                    Image(systemName: isUpListExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(WidgetPalette.accentSoft)
-                        .frame(width: 16, height: 16)
+                    PopupChevronIcon(
+                        isExpanded: isUpListExpanded,
+                        color: WidgetPalette.accentSoft,
+                        style: .summary
+                    )
                         .anchorPreference(
                             key: UpChevronAnchorPreferenceKey.self,
                             value: .bounds
@@ -327,12 +448,13 @@ struct MainWidgetView: View {
     }
 
     private var primarySectionTabs: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             primaryTabButton(.currentPeriod, title: "当前周期")
             primaryTabButton(.permanentRewards, title: "常驻奖励")
             primaryTabButton(.pullPlan, title: "抽卡规划")
-            Spacer(minLength: 0)
+            primaryTabButton(.pullPlanRecords, title: "抽卡记录")
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var currentPeriodSection: some View {
@@ -367,8 +489,6 @@ struct MainWidgetView: View {
             !RewardSchedule.permanentManualSourceOrder.contains($0.id)
         }
         let dailyRewards = store.dailyExtraRewards
-        let regulatoryRewards = dailyRewards.filter { $0.title == RewardSchedule.regulatoryEventTitle }
-        let remainingDailyRewards = dailyRewards.filter { $0.title != RewardSchedule.regulatoryEventTitle }
         let emotionRewards = extraManualRewards.filter { $0.id == RewardSchedule.emotionRandomSourceID }
         let dataGapRewards = extraManualRewards.filter { $0.id == RewardSchedule.dataGapManualSourceID }
         let remainingManualRewards = extraManualRewards.filter {
@@ -381,7 +501,7 @@ struct MainWidgetView: View {
         return VStack(alignment: .leading, spacing: 10) {
             sectionTitle("额外记录")
 
-            ForEach(regulatoryRewards) { reward in
+            ForEach(dailyRewards) { reward in
                 rewardRow(reward)
             }
 
@@ -402,10 +522,6 @@ struct MainWidgetView: View {
             }
 
             ForEach(trialRewards) { reward in
-                rewardRow(reward)
-            }
-
-            ForEach(remainingDailyRewards) { reward in
                 rewardRow(reward)
             }
 
@@ -518,15 +634,32 @@ struct MainWidgetView: View {
                         onToggleLockLevel: { lockLevel in
                             store.togglePullPlanLockChoice(bannerID: banner.id, lockLevel: lockLevel)
                         },
+                        onOpenRecord: {
+                            expandedPullPlanBannerIDs.removeAll()
+                            activeSheet = .pullPlanRecord(banner.id)
+                        },
                         onToggleExpand: {
                             if expandedPullPlanBannerIDs.contains(banner.id) {
                                 expandedPullPlanBannerIDs.remove(banner.id)
                             } else {
-                                expandedPullPlanBannerIDs.insert(banner.id)
+                                expandedPullPlanBannerIDs = [banner.id]
                             }
                         }
                     )
+                    .zIndex(
+                        expandedPullPlanBannerIDs.contains(banner.id)
+                            ? WidgetPopupLayer.popup
+                            : 0
+                    )
                 }
+            }
+        }
+    }
+
+    private var pullPlanRecordSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(store.pullPlanRecordSummaries) { summary in
+                PullPlanRecordSummaryRow(summary: summary)
             }
         }
     }
@@ -578,7 +711,23 @@ struct MainWidgetView: View {
                 : nil,
             onAdvanceCycle: progress.kind == .miniGame
                 ? { store.advanceManualCycle(for: RewardSchedule.miniGameDefinition.id) }
+                : nil,
+            isGiftCodeListExpanded: progress.kind == .redemptionCode && isGiftCodeListExpanded,
+            onToggleGiftCodeList: progress.kind == .redemptionCode
+                ? {
+                    isUpListExpanded = false
+                    isGiftCodeListExpanded.toggle()
+                    giftCodeStore.refreshIfNeeded()
+                }
                 : nil
+        )
+    }
+
+    private var visibleGiftCodes: [GiftCode] {
+        let anchorStart = RewardSchedule.currentPermanentRewardAnchor(at: Date())?.startsAt()
+        return giftCodeStore.activeCodes(
+            for: anchorStart,
+            limit: store.redemptionCodeProgress.displayedTotalCount
         )
     }
 
@@ -623,74 +772,109 @@ struct MainWidgetView: View {
     }
 
     private var upListPopup: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if upListEntries.isEmpty {
-                Text("当前没有UP记录")
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(WidgetPalette.accentSoft)
-            } else {
-                ForEach(upListEntries) { entry in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(entry.title)
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(WidgetPalette.titlePrimary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+        WidgetPopupContainer(
+            cornerRadius: 14,
+            fill: WidgetPalette.overlayFill,
+            shadowColor: WidgetPalette.accentSoft.opacity(0.12),
+            shadowRadius: 12,
+            shadowY: 5
+        ) {
+            VStack(alignment: .leading, spacing: 8) {
+                if upListEntries.isEmpty {
+                    Text("当前没有UP记录")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(WidgetPalette.accentSoft)
+                } else {
+                    ForEach(upListEntries) { entry in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.title)
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(WidgetPalette.titlePrimary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
 
-                        Text(entry.detail)
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .foregroundStyle(WidgetPalette.titleSecondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.44),
-                                        Color(red: 0.93, green: 0.96, blue: 1.00).opacity(0.16)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
+                            Text(entry.detail)
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(WidgetPalette.titleSecondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.white.opacity(0.44),
+                                            Color(red: 0.93, green: 0.96, blue: 1.00).opacity(0.16)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
                                 )
-                            )
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.46), lineWidth: 1)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.46), lineWidth: 1)
+                        }
                     }
                 }
             }
+            .padding(10)
+            .frame(width: upPopupWidth, alignment: .leading)
         }
-        .padding(10)
-        .frame(width: upPopupWidth, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.98),
-                            Color(red: 0.95, green: 0.98, blue: 1.0).opacity(0.95),
-                            Color(red: 0.94, green: 0.96, blue: 0.99).opacity(0.92)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+    }
+
+    private var giftCodeListPopup: some View {
+        WidgetPopupContainer(
+            cornerRadius: 22,
+            fill: WidgetPalette.overlayFill,
+            shadowColor: WidgetPalette.accentSoft.opacity(0.12),
+            shadowRadius: 12,
+            shadowY: 5
+        ) {
+            GiftCodeListPopup(codes: visibleGiftCodes)
+        }
+            .frame(width: giftCodePopupWidth, height: giftCodePopupHeight)
+    }
+
+    private var giftCodePopupHeight: CGFloat {
+        let rowCount = max(visibleGiftCodes.count, 1)
+        return min(218, 20 + CGFloat(rowCount * 34) + CGFloat(max(rowCount - 1, 0) * 6))
+    }
+
+    private func popupOriginX(
+        anchorX: CGFloat,
+        popupWidth: CGFloat,
+        totalWidth: CGFloat
+    ) -> CGFloat {
+        let padding: CGFloat = 12
+        return min(
+            max(anchorX - 8, padding),
+            max(padding, totalWidth - popupWidth - padding)
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.70), lineWidth: 1)
+    }
+
+    private func popupOriginY(
+        anchor: CGRect,
+        popupHeight: CGFloat,
+        totalHeight: CGFloat
+    ) -> CGFloat {
+        let padding: CGFloat = 12
+        let spacing: CGFloat = 6
+        let below = anchor.maxY + spacing
+        if below + popupHeight <= totalHeight - padding {
+            return below
         }
-        .shadow(color: WidgetPalette.accentSoft.opacity(0.12), radius: 12, y: 5)
+        return max(padding, anchor.minY - popupHeight - spacing)
     }
 
     private func primaryTabButton(_ section: PrimarySection, title: String) -> some View {
         Button {
+            isUpListExpanded = false
+            isGiftCodeListExpanded = false
             selectedPrimarySection = section
         } label: {
                 Text(title)
@@ -700,7 +884,9 @@ struct MainWidgetView: View {
                         ? WidgetPalette.accent
                         : WidgetPalette.accentLight
                 )
-                .padding(.horizontal, 12)
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
+                .frame(maxWidth: .infinity)
                 .padding(.vertical, 7)
                 .background(
                     Capsule(style: .continuous)
@@ -716,13 +902,14 @@ struct MainWidgetView: View {
                 }
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
     private func panelView(for sheet: ActiveSheet) -> some View {
         switch sheet {
         case .editInventory:
-            OverlayPanel {
+            WidgetPopupContainer {
                 EditInventorySheet(
                     currentCrystals: store.totalCrystals,
                     currentBlueTickets: store.totalBlueTickets,
@@ -740,23 +927,37 @@ struct MainWidgetView: View {
             }
             .frame(width: 310)
         case .history:
-            OverlayPanel {
+            WidgetPopupContainer {
                 HistorySheetView(store: store) {
                     activeSheet = nil
                 }
             }
             .frame(width: 310, height: 350)
+        case .pullPlanRecord(let bannerID):
+            let record = store.pullPlanTicketRecord(for: bannerID)
+            WidgetPopupContainer {
+                PullPlanTicketRecordSheet(
+                    bannerTitle: RewardSchedule.pullPlanBanners.first(where: { $0.id == bannerID })?.title ?? "卡池",
+                    currentGiftTickets: record.giftTickets,
+                    currentBlueTickets: record.blueTickets,
+                    availableBlueTickets: store.availableBlueTicketsForPullPlanRecord(bannerID),
+                    currentUpCount: record.upCount,
+                    currentUpTotal: record.upTotal
+                ) { giftTickets, blueTickets, upCount, upTotal in
+                    store.setPullPlanTicketRecord(
+                        for: bannerID,
+                        giftTickets: giftTickets,
+                        blueTickets: blueTickets,
+                        upCount: upCount,
+                        upTotal: upTotal
+                    )
+                    activeSheet = nil
+                } onClose: {
+                    activeSheet = nil
+                }
+            }
+            .frame(width: 286)
         }
-    }
-}
-
-private struct OverlayPanel<Content: View>: View {
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        content
-            .widgetOverlayPanelCard()
-            .shadow(color: Color.black.opacity(0.08), radius: 14, y: 6)
     }
 }
 
@@ -877,6 +1078,8 @@ private struct SecretPassProgressView: View {
     let onTapSlot: (SecretPassSlot) -> Void
     let onTogglePremiumPurchased: ((Bool) -> Void)?
     let onAdvanceCycle: (() -> Void)?
+    let isGiftCodeListExpanded: Bool
+    let onToggleGiftCodeList: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -890,6 +1093,22 @@ private struct SecretPassProgressView: View {
                                     ? WidgetPalette.claimed
                                     : WidgetPalette.titlePrimary
                             )
+
+                        if let onToggleGiftCodeList {
+                            Button(action: onToggleGiftCodeList) {
+                                PopupChevronIcon(
+                                    isExpanded: isGiftCodeListExpanded,
+                                    color: progress.isCompleted
+                                        ? WidgetPalette.claimed
+                                        : WidgetPalette.accentSoft
+                                )
+                                    .anchorPreference(
+                                        key: GiftCodeChevronAnchorPreferenceKey.self,
+                                        value: .bounds
+                                    ) { [$0] }
+                            }
+                            .buttonStyle(.plain)
+                        }
 
                         if let onTogglePremiumPurchased {
                             RewardActionButton(
@@ -1163,6 +1382,7 @@ private struct PullPlanBannerCardView: View {
     let onSetPityValue: (Int?) -> Void
     let onToggleUpCharacter: (String) -> Void
     let onToggleLockLevel: (Int) -> Void
+    let onOpenRecord: () -> Void
     let onToggleExpand: () -> Void
 
     var body: some View {
@@ -1177,8 +1397,7 @@ private struct PullPlanBannerCardView: View {
             }
             .buttonStyle(.plain)
 
-            ZStack(alignment: .topLeading) {
-                VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .center, spacing: 6) {
                         Text(titleBaseText)
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
@@ -1192,15 +1411,17 @@ private struct PullPlanBannerCardView: View {
 
                         if banner.supportsPopupSelection {
                             Button(action: onToggleExpand) {
-                                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(WidgetPalette.accentMuted)
-                                    .frame(width: 18, height: 18)
+                                PopupChevronIcon(
+                                    isExpanded: isExpanded,
+                                    color: WidgetPalette.accentSoft
+                                )
                             }
                             .buttonStyle(.plain)
                         }
 
                         Spacer(minLength: 0)
+
+                        recordButton
 
                         statusColumn
                     }
@@ -1222,12 +1443,12 @@ private struct PullPlanBannerCardView: View {
                             .frame(width: 34, alignment: .trailing)
                             .padding(.trailing, 4)
                     }
-                }
-
+            }
+            .overlay(alignment: .topLeading) {
                 if banner.supportsPopupSelection && isExpanded {
                     selectionPopup
                         .offset(x: 0, y: 38)
-                        .zIndex(2)
+                        .zIndex(WidgetPopupLayer.popup)
                 }
             }
         }
@@ -1336,85 +1557,60 @@ private struct PullPlanBannerCardView: View {
         }
     }
 
+    private var recordButton: some View {
+        Button(action: onOpenRecord) {
+            Text("记录")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(
+                    progress == .completed
+                        ? WidgetPalette.completedText
+                        : WidgetPalette.mutedText
+                )
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.28), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(progress != .completed)
+    }
+
     private var selectionPopup: some View {
+        WidgetPopupContainer(
+            cornerRadius: 14,
+            fill: Color.white.opacity(0.84),
+            shadowColor: Color.black.opacity(0.08),
+            shadowRadius: 10,
+            shadowY: 4
+        ) {
+            selectionPopupContent
+        }
+    }
+
+    private var selectionPopupContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             switch banner.selectionKind {
             case .targetChoice:
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], alignment: .leading, spacing: 8) {
                     ForEach(banner.characters, id: \.self) { character in
-                        Button {
+                        selectionButton(
+                            title: character,
+                            isSelected: selectedUpCharacter == character
+                        ) {
                             onToggleUpCharacter(character)
                             onToggleExpand()
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: selectedUpCharacter == character ? "checkmark.circle.fill" : "circle")
-                                    .font(.system(size: 12, weight: .semibold))
-
-                                Text(character)
-                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                    .lineLimit(1)
-                            }
-                            .foregroundStyle(
-                                selectedUpCharacter == character
-                                    ? WidgetPalette.pinkStrong
-                                    : WidgetPalette.accentMuted
-                            )
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 6)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(
-                                        selectedUpCharacter == character
-                                            ? Color.white.opacity(0.34)
-                                            : Color.white.opacity(0.16)
-                                    )
-                            )
-                            .overlay {
-                                Capsule(style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.26), lineWidth: 1)
-                            }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             case .lockCount:
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], alignment: .leading, spacing: 8) {
                     ForEach(0...5, id: \.self) { lockLevel in
-                        Button {
+                        selectionButton(
+                            title: "\(lockLevel)锁",
+                            isSelected: selectedLockLevel == lockLevel
+                        ) {
                             onToggleLockLevel(lockLevel)
                             onToggleExpand()
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: selectedLockLevel == lockLevel ? "checkmark.circle.fill" : "circle")
-                                    .font(.system(size: 12, weight: .semibold))
-
-                                Text("\(lockLevel)锁")
-                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                    .lineLimit(1)
-                            }
-                            .foregroundStyle(
-                                selectedLockLevel == lockLevel
-                                    ? WidgetPalette.pinkStrong
-                                    : WidgetPalette.accentMuted
-                            )
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 6)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(
-                                        selectedLockLevel == lockLevel
-                                            ? Color.white.opacity(0.34)
-                                            : Color.white.opacity(0.16)
-                                    )
-                            )
-                            .overlay {
-                                Capsule(style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.26), lineWidth: 1)
-                            }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             case .none:
@@ -1422,19 +1618,36 @@ private struct PullPlanBannerCardView: View {
             }
         }
         .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(0.90))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.44), lineWidth: 1)
+    }
+
+    private func selectionButton(
+        title: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 12, weight: .semibold))
+
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(isSelected ? WidgetPalette.pinkStrong : WidgetPalette.accentMuted)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isSelected ? Color.white.opacity(0.34) : Color.white.opacity(0.16))
+            )
+            .overlay {
+                Capsule(style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.26), lineWidth: 1)
+            }
         }
-        .shadow(color: Color.black.opacity(0.08), radius: 10, y: 4)
+        .buttonStyle(.plain)
     }
 }
 
@@ -1529,13 +1742,138 @@ private struct PullPlanPityField: View {
     }
 }
 
+private struct PullPlanRecordSummaryRow: View {
+    let summary: PullPlanRecordSummary
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(summary.title)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(WidgetPalette.titlePrimary)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 8) {
+                HStack(spacing: 3) {
+                    Text("抽数")
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(WidgetPalette.mutedText)
+                    Text("\(summary.drawCount)")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(WidgetPalette.titleSecondary)
+                }
+
+                HStack(spacing: 3) {
+                    Text("UP数")
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(WidgetPalette.mutedText)
+                    Text("\(summary.upCount)")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(WidgetPalette.titleSecondary)
+                }
+
+                HStack(spacing: 3) {
+                    Text("UP总数")
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(WidgetPalette.mutedText)
+                    Text("\(summary.upTotal)")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(WidgetPalette.titleSecondary)
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(11)
+        .widgetRoundedCard(fill: Color.white.opacity(0.18))
+    }
+}
+
 private struct UpListEntry: Identifiable {
     let id: String
     let title: String
     let detail: String
 }
 
+private struct GiftCodeListPopup: View {
+    let codes: [GiftCode]
+    @State private var copiedCodeID: Int?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 6) {
+                if codes.isEmpty {
+                    Text("暂无有效英文兑换码")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(WidgetPalette.accentSoft)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 7)
+                } else {
+                    ForEach(codes) { giftCode in
+                        HStack(spacing: 6) {
+                            Text(giftCode.code)
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                .foregroundStyle(WidgetPalette.titlePrimary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.72)
+
+                            Spacer(minLength: 4)
+
+                            Button {
+                                copy(giftCode)
+                            } label: {
+                                Image(systemName: copiedCodeID == giftCode.id ? "checkmark" : "doc.on.doc")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(WidgetPalette.accentSoft)
+                                    .frame(width: 24, height: 24)
+                                    .background(Color.white.opacity(0.34), in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.leading, 9)
+                        .padding(.trailing, 5)
+                        .padding(.vertical, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(Color.white.opacity(0.30))
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.46), lineWidth: 1)
+                        }
+                    }
+                }
+            }
+            .padding(10)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private func copy(_ giftCode: GiftCode) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(giftCode.code, forType: .string)
+        copiedCodeID = giftCode.id
+
+        Task {
+            try? await Task.sleep(for: .seconds(1.2))
+            if copiedCodeID == giftCode.id {
+                copiedCodeID = nil
+            }
+        }
+    }
+}
+
 private struct UpChevronAnchorPreferenceKey: PreferenceKey {
+    static let defaultValue: [Anchor<CGRect>] = []
+
+    static func reduce(value: inout [Anchor<CGRect>], nextValue: () -> [Anchor<CGRect>]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+private struct GiftCodeChevronAnchorPreferenceKey: PreferenceKey {
     static let defaultValue: [Anchor<CGRect>] = []
 
     static func reduce(value: inout [Anchor<CGRect>], nextValue: () -> [Anchor<CGRect>]) {
@@ -1547,11 +1885,19 @@ private enum PrimarySection: String {
     case currentPeriod
     case permanentRewards
     case pullPlan
+    case pullPlanRecords
 }
 
-private enum ActiveSheet: String, Identifiable {
+private enum ActiveSheet: Identifiable, Equatable {
     case editInventory
     case history
+    case pullPlanRecord(String)
 
-    var id: String { rawValue }
+    var id: String {
+        switch self {
+        case .editInventory: return "edit-inventory"
+        case .history: return "history"
+        case .pullPlanRecord(let bannerID): return "pull-plan-record-\(bannerID)"
+        }
+    }
 }

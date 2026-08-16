@@ -71,11 +71,70 @@ enum RewardSchedule {
     static let darkZoneWeeklyValue = RewardValue(crystals: 510)
     static let darkZoneSeasonOpeningBonus = RewardValue(crystals: 450)
 
-    static let dailyFixedClaimSource = "每日固定"
+    static let dailyFixedClaimSource = "每日监察任务"
+    static let historySourceAliases = [
+        "每日固定": dailyFixedClaimSource,
+        "派遣 第1项": "派遣·5异方晶",
+        "派遣 第2项": "派遣·15异方晶",
+        "派遣 第3项": "派遣·25异方晶",
+        "服从度 第1项": "服从度·获得狂级禁闭者",
+        "服从度 第2项": "服从度·狂级禁闭者40%",
+        "服从度 第3项": "服从度·获得危级禁闭者",
+        "服从度 第4项": "服从度·危级禁闭者40%",
+        "服从度 第5项": "服从度·获得普级禁闭者",
+        "服从度 第6项": "服从度·普级禁闭者40%"
+    ]
 
-    static let regulatoryEventTitle = "监管事件"
-    static let regulatoryEventValue = RewardValue(crystals: 20)
+    static func migratedHistorySource(_ source: String, claimKey: String?) -> String {
+        if let claimKey, claimKey.hasPrefix("daily-obedience-") {
+            let obedienceSources = [
+                "-orange-0-": "服从度·获得狂级禁闭者",
+                "-orange-40-": "服从度·狂级禁闭者40%",
+                "-purple-0-": "服从度·获得危级禁闭者",
+                "-purple-40-": "服从度·危级禁闭者40%",
+                "-blue-0-": "服从度·获得普级禁闭者",
+                "-blue-40-": "服从度·普级禁闭者40%"
+            ]
+            if let migrated = obedienceSources.first(where: { claimKey.contains($0.key) })?.value {
+                return migrated
+            }
+        }
+
+        if let claimKey,
+           claimKey.hasPrefix("daily-review-"),
+           !claimKey.hasSuffix("-completion"),
+           let stage = claimKey.split(separator: "-").last.flatMap({ Int($0) }),
+           (1...4).contains(stage) {
+            let grade = claimKey.contains("-orange") ? "狂级" : "危级"
+            return "审查·\(grade)禁闭者\(["第一", "第二", "第三", "第四"][stage - 1])阶段"
+        }
+
+        if let alias = historySourceAliases[source] {
+            return alias
+        }
+        return source
+    }
+
+    static let dailyExtraSources: [RewardSourceDefinition] = [
+        RewardSourceDefinition(
+            id: "daily-emotion-detection",
+            title: "情绪检测",
+            value: RewardValue(crystals: 30)
+        ),
+        RewardSourceDefinition(
+            id: "regulatory-event",
+            title: "监管事件",
+            value: RewardValue(crystals: 20)
+        )
+    ]
     static let activityPoolTitle = "活动池"
+    static let pullPlanRecordPoolTitles = [
+        activityPoolTitle,
+        "复刻池",
+        "统合池",
+        "定轨池",
+        "限定池"
+    ]
     static let dailyDispatchID = "daily-dispatch"
     static let dailyReviewID = "daily-review"
     static let emotionRandomSourceID = "emotion-random"
@@ -97,6 +156,7 @@ enum RewardSchedule {
                 DailyProgressSlotDefinition(
                     id: "dispatch-\(index + 1)",
                     value: RewardValue(crystals: value),
+                    historySources: ["派遣·\(value)异方晶"],
                     maxCount: 1,
                     tint: .neutral,
                     completionBonus: .zero
@@ -117,6 +177,12 @@ enum RewardSchedule {
                         RewardValue(crystals: 50),
                         RewardValue(crystals: 80)
                     ],
+                    historySources: [
+                        "审查·狂级禁闭者第一阶段",
+                        "审查·狂级禁闭者第二阶段",
+                        "审查·狂级禁闭者第三阶段",
+                        "审查·狂级禁闭者第四阶段"
+                    ],
                     maxCount: 4,
                     tint: .orange,
                     completionBonus: .zero
@@ -128,6 +194,11 @@ enum RewardSchedule {
                         RewardValue(crystals: 60),
                         RewardValue(crystals: 50),
                         RewardValue(crystals: 60)
+                    ],
+                    historySources: [
+                        "审查·危级禁闭者第一阶段",
+                        "审查·危级禁闭者第二阶段",
+                        "审查·危级禁闭者第三阶段"
                     ],
                     maxCount: 3,
                     tint: .purple,
@@ -145,6 +216,7 @@ enum RewardSchedule {
                     id: "orange-0",
                     value: RewardValue(crystals: 60),
                     labels: ["0"],
+                    historySources: ["服从度·获得狂级禁闭者"],
                     maxCount: 1,
                     tint: .orange,
                     completionBonus: .zero
@@ -153,6 +225,7 @@ enum RewardSchedule {
                     id: "orange-40",
                     value: RewardValue(crystals: 30),
                     labels: ["40"],
+                    historySources: ["服从度·狂级禁闭者40%"],
                     maxCount: 1,
                     tint: .orange,
                     completionBonus: .zero
@@ -161,6 +234,7 @@ enum RewardSchedule {
                     id: "purple-0",
                     value: RewardValue(crystals: 20),
                     labels: ["0"],
+                    historySources: ["服从度·获得危级禁闭者"],
                     maxCount: 1,
                     tint: .purple,
                     completionBonus: .zero
@@ -169,6 +243,7 @@ enum RewardSchedule {
                     id: "purple-40",
                     value: RewardValue(crystals: 10),
                     labels: ["40"],
+                    historySources: ["服从度·危级禁闭者40%"],
                     maxCount: 1,
                     tint: .purple,
                     completionBonus: .zero
@@ -177,6 +252,7 @@ enum RewardSchedule {
                     id: "blue-0",
                     value: RewardValue(crystals: 10),
                     labels: ["0"],
+                    historySources: ["服从度·获得普级禁闭者"],
                     maxCount: 1,
                     tint: .blue,
                     completionBonus: .zero
@@ -185,6 +261,7 @@ enum RewardSchedule {
                     id: "blue-40",
                     value: RewardValue(crystals: 5),
                     labels: ["40"],
+                    historySources: ["服从度·普级禁闭者40%"],
                     maxCount: 1,
                     tint: .blue,
                     completionBonus: .zero
@@ -310,9 +387,10 @@ enum RewardSchedule {
     // - 2 个橙色头像：directional Arrest -> 定轨池
     // - 4 个橙色头像：collective Arrest -> 统合池
     // - 只保留橙色头像角色名，紫色角色不显示
-    static let pullPlanBanners: [PullPlanBanner] = [
+    private static let bundledPullPlanBanners: [PullPlanBanner] = [
         PullPlanBanner(
             id: "event-celine",
+            sourceID: 338,
             title: activityPoolTitle,
             start: DayStamp(year: 2026, month: 8, day: 7),
             end: DayStamp(year: 2026, month: 9, day: 10),
@@ -320,6 +398,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "event-isomer",
+            sourceID: 337,
             title: activityPoolTitle,
             start: DayStamp(year: 2026, month: 8, day: 7),
             end: DayStamp(year: 2026, month: 9, day: 10),
@@ -327,6 +406,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "collective-owo-coquelic-raven-eirene",
+            sourceID: 343,
             title: "统合池",
             start: DayStamp(year: 2026, month: 8, day: 7),
             end: DayStamp(year: 2026, month: 9, day: 10),
@@ -335,6 +415,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "directional-eve-bianca",
+            sourceID: 344,
             title: "定轨池",
             start: DayStamp(year: 2026, month: 8, day: 14),
             end: DayStamp(year: 2026, month: 9, day: 10),
@@ -349,6 +430,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "routine-rust",
+            sourceID: 342,
             title: "复刻池",
             start: DayStamp(year: 2026, month: 8, day: 20),
             end: DayStamp(year: 2026, month: 9, day: 10),
@@ -356,6 +438,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "routine-margaret",
+            sourceID: 341,
             title: "复刻池",
             start: DayStamp(year: 2026, month: 8, day: 20),
             end: DayStamp(year: 2026, month: 9, day: 10),
@@ -363,6 +446,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "event-chengxiao",
+            sourceID: 339,
             title: activityPoolTitle,
             start: DayStamp(year: 2026, month: 9, day: 10),
             end: DayStamp(year: 2026, month: 10, day: 8),
@@ -370,6 +454,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "directional-parfait-korryn",
+            sourceID: 348,
             title: "定轨池",
             start: DayStamp(year: 2026, month: 9, day: 17),
             end: DayStamp(year: 2026, month: 10, day: 8),
@@ -378,6 +463,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "routine-lichen",
+            sourceID: 349,
             title: "复刻池",
             start: DayStamp(year: 2026, month: 9, day: 24),
             end: DayStamp(year: 2026, month: 10, day: 8),
@@ -385,6 +471,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "event-phanuel",
+            sourceID: 353,
             title: activityPoolTitle,
             start: DayStamp(year: 2026, month: 10, day: 8),
             end: DayStamp(year: 2026, month: 11, day: 5),
@@ -392,6 +479,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "collective-owo-bianca-angell-cabernet",
+            sourceID: 354,
             title: "统合池",
             start: DayStamp(year: 2026, month: 10, day: 8),
             end: DayStamp(year: 2026, month: 11, day: 5),
@@ -400,6 +488,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "directional-moore-lady-pearl",
+            sourceID: 356,
             title: "定轨池",
             start: DayStamp(year: 2026, month: 10, day: 15),
             end: DayStamp(year: 2026, month: 11, day: 5),
@@ -408,6 +497,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "routine-xiaofeng",
+            sourceID: 357,
             title: "复刻池",
             start: DayStamp(year: 2026, month: 10, day: 22),
             end: DayStamp(year: 2026, month: 11, day: 5),
@@ -415,6 +505,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "event-requiem",
+            sourceID: 368,
             title: "限定池",
             start: DayStamp(year: 2026, month: 11, day: 5),
             end: DayStamp(year: 2026, month: 12, day: 3),
@@ -423,6 +514,7 @@ enum RewardSchedule {
         ),
         PullPlanBanner(
             id: "event-famorene-eirene",
+            sourceID: 369,
             title: activityPoolTitle,
             start: DayStamp(year: 2026, month: 11, day: 5),
             end: DayStamp(year: 2026, month: 12, day: 3),
@@ -430,22 +522,46 @@ enum RewardSchedule {
         )
     ]
 
+    static var pullPlanBanners: [PullPlanBanner] {
+        let bundledIdentities = Set(bundledPullPlanBanners.map(\.syncIdentity))
+        let bundledIDs = Set(bundledPullPlanBanners.map(\.id))
+        let bundledSourceIDs = Set(bundledPullPlanBanners.compactMap(\.sourceID))
+        let appendedBanners = PullPlanBannerCache.load().filter {
+            !bundledIDs.contains($0.id)
+                && !bundledSourceIDs.contains($0.sourceID ?? -1)
+                && !bundledIdentities.contains($0.syncIdentity)
+        }
+        return bundledPullPlanBanners + appendedBanners
+    }
+
+    static func currentPermanentRewardAnchor(
+        at date: Date,
+        calendar: Calendar = .rewardCalendar
+    ) -> PullPlanBanner? {
+        pullPlanBanners
+            .filter { banner in
+                (banner.title == activityPoolTitle || banner.title == "限定池")
+                    && banner.isActive(at: date, calendar: calendar)
+            }
+            .max { lhs, rhs in
+                let lhsStart = lhs.startsAt(in: calendar)
+                let rhsStart = rhs.startsAt(in: calendar)
+                if lhsStart != rhsStart { return lhsStart < rhsStart }
+                return lhs.id < rhs.id
+            }
+    }
+
     // 抽卡规划的“垫抽数”按实际卡池体系共用：
     // - 活动池 / 复刻池：共用同一套垫抽
     // - 定轨池：共用同一套垫抽
     // - 统合池：共用同一套垫抽
     // - 限定池：共用同一套垫抽
     // 这样同期开启或前后连续的同体系卡池都会自动同步。
-    static let pullPlanPityKeyByBannerID: [String: String] = {
-        var result: [String: String] = [:]
-        for banner in pullPlanBanners {
-            result[banner.id] = pullPlanPityGroupKey(for: banner)
-        }
-        return result
-    }()
-
     static func pullPlanPityKey(for bannerID: String) -> String {
-        pullPlanPityKeyByBannerID[bannerID] ?? "pull-plan-pity-\(bannerID)"
+        guard let banner = pullPlanBanners.first(where: { $0.id == bannerID }) else {
+            return "pull-plan-pity-\(bannerID)"
+        }
+        return pullPlanPityGroupKey(for: banner)
     }
 
     static func pullPlanPityGroupKey(for banner: PullPlanBanner) -> String {

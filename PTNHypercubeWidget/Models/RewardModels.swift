@@ -161,6 +161,91 @@ struct RewardSourceDefinition: Identifiable, Hashable {
     let value: RewardValue
 }
 
+struct GiftCode: Identifiable, Codable, Hashable, Sendable {
+    let id: Int
+    let code: String
+    let startsAt: Date
+    let endsAt: Date
+
+    func isActive(at date: Date) -> Bool {
+        startsAt <= date && date < endsAt
+    }
+}
+
+struct PullPlanTicketRecord: Codable, Hashable {
+    let giftTickets: Int
+    let blueTickets: Int
+    let upCount: Int
+    let upTotal: Int
+    let basePullCount: Int
+    let consumedBlueTickets: Int
+    let consumedCrystals: Int
+
+    static let empty = PullPlanTicketRecord(
+        giftTickets: 0,
+        blueTickets: 0,
+        upCount: 0,
+        upTotal: 0,
+        basePullCount: 0,
+        consumedBlueTickets: 0,
+        consumedCrystals: 0
+    )
+
+    var isEmpty: Bool {
+        giftTickets == 0 && blueTickets == 0 && upCount == 0 && upTotal == 0 && basePullCount == 0
+    }
+
+    init(
+        giftTickets: Int,
+        blueTickets: Int,
+        upCount: Int = 0,
+        upTotal: Int = 0,
+        basePullCount: Int = 0,
+        consumedBlueTickets: Int? = nil,
+        consumedCrystals: Int = 0
+    ) {
+        self.giftTickets = giftTickets
+        self.blueTickets = blueTickets
+        self.upCount = upCount
+        self.upTotal = upTotal
+        self.basePullCount = basePullCount
+        self.consumedBlueTickets = consumedBlueTickets ?? blueTickets
+        self.consumedCrystals = consumedCrystals
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case giftTickets
+        case blueTickets
+        case upCount
+        case upTotal
+        case basePullCount
+        case consumedBlueTickets
+        case consumedCrystals
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            giftTickets: try container.decodeIfPresent(Int.self, forKey: .giftTickets) ?? 0,
+            blueTickets: try container.decodeIfPresent(Int.self, forKey: .blueTickets) ?? 0,
+            upCount: try container.decodeIfPresent(Int.self, forKey: .upCount) ?? 0,
+            upTotal: try container.decodeIfPresent(Int.self, forKey: .upTotal) ?? 0,
+            basePullCount: try container.decodeIfPresent(Int.self, forKey: .basePullCount) ?? 0,
+            consumedBlueTickets: try container.decodeIfPresent(Int.self, forKey: .consumedBlueTickets),
+            consumedCrystals: try container.decodeIfPresent(Int.self, forKey: .consumedCrystals) ?? 0
+        )
+    }
+}
+
+struct PullPlanRecordSummary: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let drawCount: Int
+    let upCount: Int
+    let upTotal: Int
+}
+
+
 struct ManualUnknownReward: Identifiable, Hashable {
     let id: String
     let title: String
@@ -203,6 +288,7 @@ struct DailyProgressSlotDefinition: Hashable {
     let value: RewardValue
     let rewardValues: [RewardValue]
     let labels: [String]
+    let historySources: [String]
     let maxCount: Int
     let tint: DailyProgressTint
     let completionBonus: RewardValue
@@ -212,6 +298,7 @@ struct DailyProgressSlotDefinition: Hashable {
         value: RewardValue,
         rewardValues: [RewardValue]? = nil,
         labels: [String] = [],
+        historySources: [String] = [],
         maxCount: Int,
         tint: DailyProgressTint,
         completionBonus: RewardValue
@@ -220,6 +307,7 @@ struct DailyProgressSlotDefinition: Hashable {
         self.value = value
         self.rewardValues = rewardValues ?? Array(repeating: value, count: maxCount)
         self.labels = labels
+        self.historySources = historySources
         self.maxCount = maxCount
         self.tint = tint
         self.completionBonus = completionBonus
@@ -234,6 +322,7 @@ struct DailyProgressSlot: Identifiable, Hashable {
     let count: Int
     let rewardValues: [RewardValue]
     let labels: [String]
+    let historySources: [String]
     let tint: DailyProgressTint
     let completionBonus: RewardValue
     let completionClaimKey: String?
@@ -267,6 +356,13 @@ struct DailyProgressSlot: Identifiable, Hashable {
         guard !labels.isEmpty else { return nil }
         return labels[min(count, labels.count - 1)]
     }
+
+    func historySource(moduleTitle: String, rewardIndex: Int) -> String {
+        guard historySources.indices.contains(rewardIndex) else {
+            return "\(moduleTitle) 第\(index)项"
+        }
+        return historySources[rewardIndex]
+    }
 }
 
 struct DailyProgress: Identifiable, Hashable {
@@ -287,8 +383,9 @@ struct DailyProgress: Identifiable, Hashable {
     }
 }
 
-struct PullPlanBanner: Identifiable, Hashable {
+struct PullPlanBanner: Identifiable, Codable, Hashable {
     let id: String
+    let sourceID: Int?
     let title: String
     let start: DayStamp
     let end: DayStamp
@@ -303,6 +400,7 @@ struct PullPlanBanner: Identifiable, Hashable {
 
     init(
         id: String,
+        sourceID: Int? = nil,
         title: String,
         start: DayStamp,
         end: DayStamp,
@@ -316,6 +414,7 @@ struct PullPlanBanner: Identifiable, Hashable {
         selectionKind: PullPlanSelectionKind = .none
     ) {
         self.id = id
+        self.sourceID = sourceID
         self.title = title
         self.start = start
         self.end = end
@@ -395,6 +494,19 @@ struct PullPlanBanner: Identifiable, Hashable {
 
         return "\(formatter.string(from: startDate)) - \(formatter.string(from: endDate))"
     }
+
+    var syncIdentity: String {
+        let characterKey = characters
+            .map { value in
+                value.lowercased().unicodeScalars
+                    .filter { CharacterSet.alphanumerics.contains($0) }
+                    .map(String.init)
+                    .joined()
+            }
+            .sorted()
+            .joined(separator: ",")
+        return "\(title)|\(characterKey)"
+    }
 }
 
 struct SecretPassSlot: Identifiable, Hashable {
@@ -457,23 +569,26 @@ struct HistoryEntry: Identifiable, Codable, Hashable {
     let source: String
     let value: RewardValue
     let claimKey: String?
+    let amountTextOverride: String?
 
     init(
         id: UUID = UUID(),
         timestamp: Date,
         source: String,
         value: RewardValue,
-        claimKey: String?
+        claimKey: String?,
+        amountTextOverride: String? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
         self.source = source
         self.value = value
         self.claimKey = claimKey
+        self.amountTextOverride = amountTextOverride
     }
 
     var amountText: String {
-        value.inlineDescription(withPlusSign: true)
+        amountTextOverride ?? value.inlineDescription(withPlusSign: true)
     }
 }
 

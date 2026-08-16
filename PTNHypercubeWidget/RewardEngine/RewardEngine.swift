@@ -43,12 +43,10 @@ struct RewardEngine {
         return RewardSnapshot(
             currentRewards: sortCurrentRewards(rewards),
             permanentRewards: makePermanentRewards(for: currentDate, claimedKeys: claimedKeys),
-            manualUnknownRewards: sortManualUnknownRewards(
-                makeManualUnknownRewards(
-                    now: currentDate,
-                    claimedKeys: claimedKeys,
-                    manualCycleVersions: manualCycleVersions
-                )
+            manualUnknownRewards: makeManualUnknownRewards(
+                now: currentDate,
+                claimedKeys: claimedKeys,
+                manualCycleVersions: manualCycleVersions
             ),
             dailyExtraRewards: makeDailyExtraRewards(for: today, claimedKeys: claimedKeys),
             dailyProgresses: makeDailyProgresses(
@@ -102,8 +100,7 @@ struct RewardEngine {
 
             let claimKey = "permanent-reward-\(definition.id)-\(anchor.id)"
             let title = "\(definition.title)·\(poolTitle)"
-            return RewardItem(
-                id: claimKey,
+            return makeRewardItem(
                 category: .unknownSchedule,
                 title: title,
                 footnote: remainingText(
@@ -112,11 +109,9 @@ struct RewardEngine {
                     hourSuffix: "时"
                 ),
                 displayValue: definition.value,
-                claimValue: definition.value,
-                claimSource: title,
                 claimKey: claimKey,
                 sortOrder: definition.sortOrder,
-                isClaimed: claimedKeys.contains(claimKey)
+                claimedKeys: claimedKeys
             )
         }
         .sorted { lhs, rhs in
@@ -134,24 +129,7 @@ struct RewardEngine {
     }
 
     private func currentPermanentRewardAnchor(at date: Date) -> PullPlanBanner? {
-        activePermanentRewardBanners(at: date)
-            .max { lhs, rhs in
-                let lhsStart = lhs.startsAt(in: calendar)
-                let rhsStart = rhs.startsAt(in: calendar)
-                if lhsStart != rhsStart {
-                    return lhsStart < rhsStart
-                }
-                // 同期活动池中，Isomer 是当前常驻奖励对应的池；保持配置顺序无关。
-                return lhs.id < rhs.id
-            }
-    }
-
-    private func activePermanentRewardBanners(at date: Date) -> [PullPlanBanner] {
-        // 活动池和限定池都可以驱动常驻奖励；限定池归入周年庆特殊周期。
-        RewardSchedule.pullPlanBanners.filter { banner in
-            (banner.title == RewardSchedule.activityPoolTitle || banner.title == "限定池")
-                && banner.isActive(at: date, calendar: calendar)
-        }
+        RewardSchedule.currentPermanentRewardAnchor(at: date, calendar: calendar)
     }
 
     private func permanentRewardPoolBanners(for anchor: PullPlanBanner) -> [PullPlanBanner] {
@@ -218,21 +196,13 @@ struct RewardEngine {
         for day: DayStamp,
         claimedKeys: Set<String>
     ) -> [RewardItem] {
-        let claimKey = "regulatory-event-\(day.key)"
-        return [
-            RewardItem(
-                id: claimKey,
-                category: .unknownSchedule,
-                title: RewardSchedule.regulatoryEventTitle,
-                footnote: nil,
-                displayValue: RewardSchedule.regulatoryEventValue,
-                claimValue: RewardSchedule.regulatoryEventValue,
-                claimSource: RewardSchedule.regulatoryEventTitle,
-                claimKey: claimKey,
-                sortOrder: 500,
-                isClaimed: claimedKeys.contains(claimKey)
-            )
-        ]
+        makeConfiguredRewards(
+            from: RewardSchedule.dailyExtraSources,
+            category: .unknownSchedule,
+            cycleKey: day.key,
+            sortOrderBase: 500,
+            claimedKeys: claimedKeys
+        )
     }
 
     private func makeDailyProgresses(
@@ -261,6 +231,7 @@ struct RewardEngine {
                     count: claimKeys.filter { claimedKeys.contains($0) }.count,
                     rewardValues: slotDefinition.rewardValues,
                     labels: slotDefinition.labels,
+                    historySources: slotDefinition.historySources,
                     tint: slotDefinition.tint,
                     completionBonus: slotDefinition.completionBonus,
                     completionClaimKey: completionClaimKey,
@@ -279,63 +250,89 @@ struct RewardEngine {
 
     private func makeDailyRewards(for day: DayStamp, claimedKeys: Set<String>) -> [RewardItem] {
         let claimKey = "daily-fixed-\(day.key)"
-        let isClaimed = claimedKeys.contains(claimKey)
         let totalValue = RewardSchedule.dailySources.reduce(RewardValue.zero) { partial, source in
             partial + source.value
         }
 
         return RewardSchedule.dailySources.enumerated().map { index, source in
-            RewardItem(
+            makeRewardItem(
                 id: "\(source.id)-\(day.key)",
                 category: .daily,
                 title: source.title,
-                footnote: nil,
                 displayValue: source.value,
                 claimValue: totalValue,
                 claimSource: RewardSchedule.dailyFixedClaimSource,
                 claimKey: claimKey,
                 sortOrder: 100 + index,
-                isClaimed: isClaimed
+                claimedKeys: claimedKeys
             )
         }
     }
 
     private func makeWeeklyRewards(for day: DayStamp, claimedKeys: Set<String>) -> [RewardItem] {
-        let weekStart = weekStart(for: day)
-        return RewardSchedule.weeklySources.enumerated().map { index, source in
-            let claimKey = "\(source.id)-\(weekStart.key)"
-            return RewardItem(
-                id: claimKey,
-                category: .weekly,
+        makeConfiguredRewards(
+            from: RewardSchedule.weeklySources,
+            category: .weekly,
+            cycleKey: weekStart(for: day).key,
+            sortOrderBase: 200,
+            claimedKeys: claimedKeys
+        )
+    }
+
+    private func makeMonthlyRewards(for day: DayStamp, claimedKeys: Set<String>) -> [RewardItem] {
+        makeConfiguredRewards(
+            from: RewardSchedule.monthlySources,
+            category: .monthly,
+            cycleKey: monthStart(for: day).key,
+            sortOrderBase: 250,
+            claimedKeys: claimedKeys
+        )
+    }
+
+    private func makeConfiguredRewards(
+        from sources: [RewardSourceDefinition],
+        category: RewardCategory,
+        cycleKey: String,
+        sortOrderBase: Int,
+        claimedKeys: Set<String>
+    ) -> [RewardItem] {
+        sources.enumerated().map { index, source in
+            let claimKey = "\(source.id)-\(cycleKey)"
+            return makeRewardItem(
+                category: category,
                 title: source.title,
-                footnote: nil,
                 displayValue: source.value,
-                claimValue: source.value,
-                claimSource: source.title,
                 claimKey: claimKey,
-                sortOrder: 200 + index,
-                isClaimed: claimedKeys.contains(claimKey)
+                sortOrder: sortOrderBase + index,
+                claimedKeys: claimedKeys
             )
         }
     }
 
-    private func makeMonthlyRewards(for day: DayStamp, claimedKeys: Set<String>) -> [RewardItem] {
-        let monthStart = monthStart(for: day)
-        return RewardSchedule.monthlySources.enumerated().map { index, source in
-            let claimKey = "\(source.id)-\(monthStart.key)"
-            return RewardItem(
-                id: claimKey,
-                category: .monthly,
-                title: source.title,
-                footnote: nil,
-                displayValue: source.value,
-                claimValue: source.value,
-                claimSource: source.title,
-                claimKey: claimKey,
-                sortOrder: 250 + index,
-                isClaimed: claimedKeys.contains(claimKey)
-            )
-        }
+    private func makeRewardItem(
+        id: String? = nil,
+        category: RewardCategory,
+        title: String,
+        footnote: String? = nil,
+        displayValue: RewardValue,
+        claimValue: RewardValue? = nil,
+        claimSource: String? = nil,
+        claimKey: String,
+        sortOrder: Int,
+        claimedKeys: Set<String>
+    ) -> RewardItem {
+        RewardItem(
+            id: id ?? claimKey,
+            category: category,
+            title: title,
+            footnote: footnote,
+            displayValue: displayValue,
+            claimValue: claimValue ?? displayValue,
+            claimSource: claimSource ?? title,
+            claimKey: claimKey,
+            sortOrder: sortOrder,
+            isClaimed: claimedKeys.contains(claimKey)
+        )
     }
 
     private func makeTimedMonthlyRewards(for day: DayStamp, claimedKeys: Set<String>) -> [RewardItem] {
@@ -346,17 +343,13 @@ struct RewardEngine {
 
             let monthStart = monthStart(for: day)
             let claimKey = "\(source.id)-\(monthStart.key)"
-            return RewardItem(
-                id: claimKey,
+            return makeRewardItem(
                 category: .monthly,
                 title: source.title,
-                footnote: nil,
                 displayValue: source.value,
-                claimValue: source.value,
-                claimSource: source.title,
                 claimKey: claimKey,
                 sortOrder: 275 + index,
-                isClaimed: claimedKeys.contains(claimKey)
+                claimedKeys: claimedKeys
             )
         }
     }
@@ -373,18 +366,15 @@ struct RewardEngine {
         var rewards: [RewardItem] = []
 
         let weeklyClaimKey = "dark-zone-\(currentSeason)-week-\(weekIndex)"
+        let weeklyTitle = "暗域·第\(currentSeason)期第\(weekIndex)周"
         rewards.append(
-            RewardItem(
-                id: weeklyClaimKey,
+            makeRewardItem(
                 category: .darkZone,
-                title: "暗域·第\(currentSeason)期第\(weekIndex)周",
-                footnote: nil,
+                title: weeklyTitle,
                 displayValue: RewardSchedule.darkZoneWeeklyValue,
-                claimValue: RewardSchedule.darkZoneWeeklyValue,
-                claimSource: "暗域·第\(currentSeason)期第\(weekIndex)周",
                 claimKey: weeklyClaimKey,
                 sortOrder: 300,
-                isClaimed: claimedKeys.contains(weeklyClaimKey)
+                claimedKeys: claimedKeys
             )
         )
 
@@ -398,18 +388,15 @@ struct RewardEngine {
             let claimKey = "dark-zone-season-\(season)"
             let isClaimed = claimedKeys.contains(claimKey)
             if season == currentSeason || !isClaimed {
+                let title = "暗域·第\(season)期赛季奖励"
                 rewards.append(
-                    RewardItem(
-                        id: claimKey,
+                    makeRewardItem(
                         category: .darkZone,
-                        title: "暗域·第\(season)期赛季奖励",
-                        footnote: nil,
+                        title: title,
                         displayValue: RewardSchedule.darkZoneSeasonOpeningBonus,
-                        claimValue: RewardSchedule.darkZoneSeasonOpeningBonus,
-                        claimSource: "暗域·第\(season)期赛季奖励",
                         claimKey: claimKey,
                         sortOrder: 301 + season,
-                        isClaimed: isClaimed
+                        claimedKeys: claimedKeys
                     )
                 )
             }
@@ -436,18 +423,15 @@ struct RewardEngine {
         let value = RewardSchedule.eventTrialValue(for: activeEventBanners)
         let groupKey = activeEventBanners.map(\.id).sorted().joined(separator: "-")
         let claimKey = "event-trial-\(groupKey)"
+        let rewardTitle = "试用·\(title)"
 
-        return RewardItem(
-            id: claimKey,
+        return makeRewardItem(
             category: .eventTrial,
-            title: "试用·\(title)",
-            footnote: nil,
+            title: rewardTitle,
             displayValue: value,
-            claimValue: value,
-            claimSource: "试用·\(title)",
             claimKey: claimKey,
             sortOrder: 290,
-            isClaimed: claimedKeys.contains(claimKey)
+            claimedKeys: claimedKeys
         )
     }
 
@@ -461,17 +445,14 @@ struct RewardEngine {
 
             let dayIndex = offset + 1
             let claimKey = "data-gap-\(window.id)-day-\(dayIndex)"
-            return RewardItem(
-                id: claimKey,
+            let title = "\(window.title) Day \(dayIndex)"
+            return makeRewardItem(
                 category: .dataGap,
-                title: "\(window.title) Day \(dayIndex)",
-                footnote: nil,
+                title: title,
                 displayValue: window.dailyValue,
-                claimValue: window.dailyValue,
-                claimSource: "\(window.title) Day \(dayIndex)",
                 claimKey: claimKey,
                 sortOrder: 400,
-                isClaimed: claimedKeys.contains(claimKey)
+                claimedKeys: claimedKeys
             )
         }
 
@@ -849,10 +830,6 @@ struct RewardEngine {
             }
             return lhs.title < rhs.title
         }
-    }
-
-    private func sortManualUnknownRewards(_ rewards: [ManualUnknownReward]) -> [ManualUnknownReward] {
-        rewards
     }
 
     func currentDarkZoneClaimKey(on currentDate: Date) -> String {

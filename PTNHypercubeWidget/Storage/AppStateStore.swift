@@ -23,6 +23,7 @@ final class AppStateStore: ObservableObject {
     @Published private(set) var selectedPullPlanUpChoices: [String: String]
     @Published private(set) var selectedPullPlanLockChoices: [String: Int]
     @Published private(set) var pullPlanPityValues: [String: Int]
+    @Published private(set) var pullPlanTicketRecords: [String: PullPlanTicketRecord]
 
     private let defaults: UserDefaults
     private let rewardEngine: RewardEngine
@@ -44,6 +45,7 @@ final class AppStateStore: ObservableObject {
         static let selectedPullPlanUpChoices = "ptn.selectedPullPlanUpChoices"
         static let selectedPullPlanLockChoices = "ptn.selectedPullPlanLockChoices"
         static let pullPlanPityValues = "ptn.pullPlanPityValues"
+        static let pullPlanTicketRecords = "ptn.pullPlanTicketRecords"
         static let usesExtraTranslucentBackground = "ptn.usesExtraTranslucentBackground"
         static let hasPremiumSecretPass = "ptn.hasPremiumSecretPass"
         static let automaticStorageLastUpdateAt = "ptn.automaticStorageLastUpdateAt"
@@ -73,6 +75,9 @@ final class AppStateStore: ObservableObject {
         self.selectedPullPlanLockChoices = defaults.dictionary(forKey: StorageKey.selectedPullPlanLockChoices) as? [String: Int] ?? [:]
         let savedPullPlanPityValues = defaults.dictionary(forKey: StorageKey.pullPlanPityValues) as? [String: Int] ?? [:]
         self.pullPlanPityValues = Self.migratedPullPlanPityValues(from: savedPullPlanPityValues)
+        self.pullPlanTicketRecords = Self.loadPullPlanTicketRecords(
+            from: defaults.data(forKey: StorageKey.pullPlanTicketRecords)
+        )
         self.hasPremiumSecretPass = defaults.object(forKey: StorageKey.hasPremiumSecretPass) as? Bool ?? false
         self.usesExtraTranslucentBackground = defaults.object(forKey: StorageKey.usesExtraTranslucentBackground) as? Bool ?? false
         self.secretPassProgress = SecretPassProgress(
@@ -130,6 +135,9 @@ final class AppStateStore: ObservableObject {
             isPremiumPurchased: false,
             showsCycleAdvanceButton: RewardSchedule.anniversarySignInDefinition.showsCycleAdvanceButton
         )
+        migratePullPlanRecordHistorySources()
+        ensurePullPlanRecordHistory()
+        removeObsoleteReviewCompletionRewards()
         bootstrapInitialStateIfNeeded()
         refreshRewards()
     }
@@ -249,7 +257,7 @@ final class AppStateStore: ObservableObject {
             recordClaim(
                 claimKey: "\(cycleID)-v\(nextVersion)-1",
                 value: slot.value,
-                source: "\(progress.title) 第\(slot.index)项",
+                source: slot.historySource(moduleTitle: progress.title, rewardIndex: 0),
                 now: now
             )
             return
@@ -262,7 +270,10 @@ final class AppStateStore: ObservableObject {
                 recordClaim(
                     claimKey: claimKey,
                     value: slot.rewardValues[slot.count + offset],
-                    source: "\(progress.title) 第\(slot.index)项",
+                    source: slot.historySource(
+                        moduleTitle: progress.title,
+                        rewardIndex: slot.count + offset
+                    ),
                     now: now
                 )
             }
@@ -473,6 +484,208 @@ final class AppStateStore: ObservableObject {
         refreshRewards(now: now)
     }
 
+    func pullPlanTicketRecord(for bannerID: String) -> PullPlanTicketRecord {
+        pullPlanTicketRecords[bannerID] ?? .empty
+    }
+
+    func pullPlanRecordedDrawCount(for bannerID: String) -> Int {
+        let record = pullPlanTicketRecord(for: bannerID)
+        let pity = pullPlanPityValue(for: bannerID) ?? 0
+        return max(0, record.basePullCount - pity)
+    }
+
+    var pullPlanRecordSummaries: [PullPlanRecordSummary] {
+        RewardSchedule.pullPlanRecordPoolTitles.map { title in
+            let banners = RewardSchedule.pullPlanBanners
+                .filter { $0.title == title }
+            let records = banners.map { pullPlanTicketRecord(for: $0.id) }
+            let baseDrawCount = banners.reduce(0) { $0 + pullPlanRecordedDrawCount(for: $1.id) }
+            let baseUpCount = records.reduce(0) { $0 + $1.upCount }
+            let baseUpTotal = records.map(\.upTotal).max() ?? 0
+            return PullPlanRecordSummary(
+                id: title,
+                title: title,
+                drawCount: max(0, baseDrawCount),
+                upCount: baseUpCount,
+                upTotal: baseUpTotal
+            )
+        }
+    }
+
+    func availableBlueTicketsForPullPlanRecord(_ bannerID: String) -> Int {
+        availablePullPlanTicketEquivalent(
+            restoring: pullPlanTicketRecord(for: bannerID)
+        )
+    }
+
+    func setPullPlanTicketRecord(
+        for bannerID: String,
+        giftTickets: Int,
+        blueTickets: Int,
+        upCount: Int,
+        upTotal: Int,
+        now: Date = Date()
+    ) {
+        let previous = pullPlanTicketRecord(for: bannerID)
+        let sanitizedGiftTickets = max(0, giftTickets)
+        let sanitizedBlueTickets = max(0, blueTickets)
+        // Gift tickets count toward this banner's draw record, but never consume saved inventory.
+        let inventoryTicketCost = sanitizedBlueTickets
+        let availableEquivalent = availablePullPlanTicketEquivalent(restoring: previous)
+        guard inventoryTicketCost <= availableEquivalent else { return }
+
+        restorePullPlanConsumption(previous, bannerID: bannerID)
+
+        let consumedBlueTickets = min(inventoryTicketCost, totalBlueTickets)
+        let consumedCrystals = (inventoryTicketCost - consumedBlueTickets) * 180
+        totalBlueTickets -= consumedBlueTickets
+        totalCrystals -= consumedCrystals
+
+        let updated = PullPlanTicketRecord(
+            giftTickets: sanitizedGiftTickets,
+            blueTickets: sanitizedBlueTickets,
+            upCount: max(0, upCount),
+            upTotal: max(0, upTotal),
+            basePullCount: (pullPlanPityValue(for: bannerID) ?? 0)
+                + sanitizedBlueTickets
+                + sanitizedGiftTickets,
+            consumedBlueTickets: consumedBlueTickets,
+            consumedCrystals: consumedCrystals
+        )
+
+        if updated == .empty {
+            pullPlanTicketRecords.removeValue(forKey: bannerID)
+        } else {
+            pullPlanTicketRecords[bannerID] = updated
+            let consumedValue = RewardValue(
+                crystals: -consumedCrystals,
+                blueTickets: -consumedBlueTickets
+            )
+            history.insert(
+                HistoryEntry(
+                    timestamp: now,
+                    source: pullPlanRecordSource(for: bannerID),
+                    value: consumedValue,
+                    claimKey: pullPlanRecordClaimKey(for: bannerID),
+                    amountTextOverride: pullPlanRecordAmountText(
+                        giftTickets: sanitizedGiftTickets,
+                        consumedBlueTickets: consumedBlueTickets,
+                        consumedCrystals: consumedCrystals
+                    )
+                ),
+                at: 0
+            )
+        }
+        persist()
+        refreshRewards(now: now)
+    }
+
+    private func availablePullPlanTicketEquivalent(
+        restoring record: PullPlanTicketRecord
+    ) -> Int {
+        totalBlueTickets
+            + totalCrystals / 180
+            + record.consumedBlueTickets
+            + record.consumedCrystals / 180
+    }
+
+    private func pullPlanRecordClaimKey(for bannerID: String) -> String {
+        "pull-plan-record-\(bannerID)"
+    }
+
+    private func pullPlanRecordAmountText(
+        giftTickets: Int,
+        consumedBlueTickets: Int,
+        consumedCrystals: Int
+    ) -> String {
+        var components: [String] = []
+        if giftTickets > 0 {
+            components.append("-\(giftTickets)赠送票")
+        }
+        if consumedBlueTickets > 0 {
+            components.append("-\(consumedBlueTickets)蓝票")
+        }
+        if consumedCrystals > 0 {
+            components.append("-\(consumedCrystals)晶")
+        }
+        return components.isEmpty ? "已记录" : components.joined(separator: " · ")
+    }
+
+    private func pullPlanRecordSource(for bannerID: String) -> String {
+        guard let banner = RewardSchedule.pullPlanBanners.first(where: { $0.id == bannerID }) else {
+            return "抽卡记录·\(bannerID)"
+        }
+
+        let character = selectedPullPlanUpChoices[bannerID]
+            ?? banner.characters.first
+            ?? banner.title
+        return "抽卡记录·\(character)"
+    }
+
+    private func migratePullPlanRecordHistorySources() {
+        var changed = false
+        history = history.map { entry in
+            guard let claimKey = entry.claimKey,
+                  claimKey.hasPrefix("pull-plan-record-") else {
+                return entry
+            }
+
+            let bannerID = String(claimKey.dropFirst("pull-plan-record-".count))
+            let source = pullPlanRecordSource(for: bannerID)
+            guard source != entry.source else { return entry }
+
+            changed = true
+            return HistoryEntry(
+                id: entry.id,
+                timestamp: entry.timestamp,
+                source: source,
+                value: entry.value,
+                claimKey: entry.claimKey,
+                amountTextOverride: entry.amountTextOverride
+            )
+        }
+        if changed {
+            persist()
+        }
+    }
+
+    private func ensurePullPlanRecordHistory() {
+        var changed = false
+        for (bannerID, record) in pullPlanTicketRecords where !record.isEmpty {
+            let claimKey = pullPlanRecordClaimKey(for: bannerID)
+            guard !history.contains(where: { $0.claimKey == claimKey }) else { continue }
+
+            history.insert(
+                HistoryEntry(
+                    timestamp: Date(),
+                    source: pullPlanRecordSource(for: bannerID),
+                    value: RewardValue(
+                        crystals: -record.consumedCrystals,
+                        blueTickets: -record.consumedBlueTickets
+                    ),
+                    claimKey: claimKey,
+                    amountTextOverride: pullPlanRecordAmountText(
+                        giftTickets: record.giftTickets,
+                        consumedBlueTickets: record.consumedBlueTickets,
+                        consumedCrystals: record.consumedCrystals
+                    )
+                ),
+                at: 0
+            )
+            changed = true
+        }
+        if changed {
+            persist()
+        }
+    }
+
+    private func restorePullPlanConsumption(_ record: PullPlanTicketRecord, bannerID: String) {
+        guard !record.isEmpty else { return }
+        totalBlueTickets += record.consumedBlueTickets
+        totalCrystals += record.consumedCrystals
+        history.removeAll { $0.claimKey == pullPlanRecordClaimKey(for: bannerID) }
+    }
+
     func setUsesExtraTranslucentBackground(_ usesExtraTranslucentBackground: Bool) {
         guard self.usesExtraTranslucentBackground != usesExtraTranslucentBackground else { return }
         self.usesExtraTranslucentBackground = usesExtraTranslucentBackground
@@ -543,6 +756,17 @@ final class AppStateStore: ObservableObject {
             guard let claimKey = entry.claimKey else { return true }
             return !claimKey.hasPrefix(RewardSchedule.automaticStorageHistoryKey)
         }) else {
+            return
+        }
+
+        if let claimKey = history[index].claimKey,
+           claimKey.hasPrefix("pull-plan-record-") {
+            let bannerID = String(claimKey.dropFirst("pull-plan-record-".count))
+            let record = pullPlanTicketRecord(for: bannerID)
+            restorePullPlanConsumption(record, bannerID: bannerID)
+            pullPlanTicketRecords.removeValue(forKey: bannerID)
+            persist()
+            refreshRewards(now: now)
             return
         }
 
@@ -675,6 +899,27 @@ final class AppStateStore: ObservableObject {
         if let data = try? encoder.encode(history) {
             defaults.set(data, forKey: StorageKey.history)
         }
+        if let data = try? encoder.encode(pullPlanTicketRecords) {
+            defaults.set(data, forKey: StorageKey.pullPlanTicketRecords)
+        }
+    }
+
+    private func removeObsoleteReviewCompletionRewards() {
+        let obsoleteEntries = history.filter { entry in
+            guard let claimKey = entry.claimKey else { return false }
+            return claimKey.hasPrefix("daily-review-") && claimKey.hasSuffix("-completion")
+        }
+        guard !obsoleteEntries.isEmpty else { return }
+
+        let obsoleteIDs = Set(obsoleteEntries.map(\.id))
+        for entry in obsoleteEntries {
+            if let claimKey = entry.claimKey {
+                claimedRewardKeys.remove(claimKey)
+            }
+            revert(value: entry.value)
+        }
+        history.removeAll { obsoleteIDs.contains($0.id) }
+        persist()
     }
 
     private static func loadHistory(from data: Data?) -> [HistoryEntry] {
@@ -682,8 +927,31 @@ final class AppStateStore: ObservableObject {
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return (try? decoder.decode([HistoryEntry].self, from: data)) ?? []
+        let entries = (try? decoder.decode([HistoryEntry].self, from: data)) ?? []
+        return entries.map { entry in
+            let migratedSource = RewardSchedule.migratedHistorySource(
+                entry.source,
+                claimKey: entry.claimKey
+            )
+            guard migratedSource != entry.source else {
+                return entry
+            }
+            return HistoryEntry(
+                id: entry.id,
+                timestamp: entry.timestamp,
+                source: migratedSource,
+                value: entry.value,
+                claimKey: entry.claimKey,
+                amountTextOverride: entry.amountTextOverride
+            )
+        }
     }
+
+    private static func loadPullPlanTicketRecords(from data: Data?) -> [String: PullPlanTicketRecord] {
+        guard let data else { return [:] }
+        return (try? JSONDecoder().decode([String: PullPlanTicketRecord].self, from: data)) ?? [:]
+    }
+
 
     private static func migratedPullPlanPityValues(from rawValues: [String: Int]) -> [String: Int] {
         guard !rawValues.isEmpty else { return rawValues }

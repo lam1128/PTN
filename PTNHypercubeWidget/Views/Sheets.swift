@@ -92,6 +92,162 @@ struct EditInventorySheet: View {
     }
 }
 
+struct PullPlanTicketRecordSheet: View {
+    let bannerTitle: String
+    let currentGiftTickets: Int
+    let currentBlueTickets: Int
+    let availableBlueTickets: Int
+    let currentUpCount: Int
+    let currentUpTotal: Int
+    let onSave: (Int, Int, Int, Int) -> Void
+    let onClose: () -> Void
+
+    @State private var giftTicketDraft: String
+    @State private var blueTicketDraft: String
+    @State private var upCountDraft: String
+    @State private var upTotalDraft: String
+    @State private var upTotalManuallyEdited: Bool
+
+    init(
+        bannerTitle: String,
+        currentGiftTickets: Int,
+        currentBlueTickets: Int,
+        availableBlueTickets: Int,
+        currentUpCount: Int,
+        currentUpTotal: Int,
+        onSave: @escaping (Int, Int, Int, Int) -> Void,
+        onClose: @escaping () -> Void
+    ) {
+        self.bannerTitle = bannerTitle
+        self.currentGiftTickets = currentGiftTickets
+        self.currentBlueTickets = currentBlueTickets
+        self.availableBlueTickets = availableBlueTickets
+        self.currentUpCount = currentUpCount
+        self.currentUpTotal = currentUpTotal
+        self.onSave = onSave
+        self.onClose = onClose
+        _giftTicketDraft = State(initialValue: currentGiftTickets == 0 ? "" : String(currentGiftTickets))
+        _blueTicketDraft = State(initialValue: currentBlueTickets == 0 ? "" : String(currentBlueTickets))
+        _upCountDraft = State(initialValue: currentUpCount == 0 ? "" : String(currentUpCount))
+        _upTotalDraft = State(initialValue: currentUpTotal == 0 ? "" : String(currentUpTotal))
+        _upTotalManuallyEdited = State(initialValue: currentUpTotal != currentUpCount)
+    }
+
+    private var giftTickets: Int {
+        Int(giftTicketDraft) ?? 0
+    }
+
+    private var blueTickets: Int {
+        Int(blueTicketDraft) ?? 0
+    }
+
+    private var upCount: Int {
+        Int(upCountDraft) ?? 0
+    }
+
+    private var upTotal: Int {
+        Int(upTotalDraft) ?? 0
+    }
+
+    private var isValid: Bool {
+        blueTickets >= 0 && blueTickets <= availableBlueTickets
+    }
+
+    private var hasChanges: Bool {
+        giftTickets != currentGiftTickets ||
+            blueTickets != currentBlueTickets ||
+            upCount != currentUpCount ||
+            upTotal != currentUpTotal
+    }
+
+    private var canConfirm: Bool {
+        isValid
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            panelHeader("记录·\(bannerTitle)", onClose: onClose)
+
+            HStack(spacing: 10) {
+                ticketField("赠送票", text: $giftTicketDraft, onSubmit: submit)
+                ticketField("蓝票", text: $blueTicketDraft, onSubmit: submit)
+            }
+
+            HStack(spacing: 10) {
+                ticketField("UP数", text: $upCountDraft, onSubmit: submit)
+                ticketField("UP总数", text: upTotalEditingBinding, onSubmit: submit)
+            }
+
+            HStack {
+                Button("取消", action: onClose)
+
+                Spacer()
+
+                Button("确认") {
+                    submit()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(WidgetPalette.pink)
+                .disabled(!canConfirm)
+            }
+        }
+        .padding(16)
+        .onChange(of: giftTicketDraft) { _, value in
+            giftTicketDraft = filteredNumber(value)
+        }
+        .onChange(of: blueTicketDraft) { _, value in
+            blueTicketDraft = filteredNumber(value)
+        }
+        .onChange(of: upCountDraft) { _, value in
+            let filtered = filteredNumber(value)
+            upCountDraft = filtered
+            if !upTotalManuallyEdited {
+                upTotalDraft = filtered
+            }
+        }
+    }
+
+    private var upTotalEditingBinding: Binding<String> {
+        Binding(
+            get: { upTotalDraft },
+            set: { value in
+                upTotalManuallyEdited = true
+                upTotalDraft = filteredNumber(value)
+            }
+        )
+    }
+
+    private func submit() {
+        guard isValid else { return }
+        if hasChanges {
+            onSave(giftTickets, blueTickets, upCount, upTotal)
+        } else {
+            onClose()
+        }
+    }
+
+    private func ticketField(
+        _ title: String,
+        text: Binding<String>,
+        onSubmit: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(WidgetPalette.titlePrimary)
+
+            TextField("0", text: text)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(onSubmit)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func filteredNumber(_ value: String) -> String {
+        String(value.filter(\.isNumber).prefix(4))
+    }
+}
+
 struct HistorySheetView: View {
     @ObservedObject var store: AppStateStore
     let onClose: () -> Void
