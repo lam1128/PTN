@@ -51,6 +51,7 @@ final class AppStateStore: ObservableObject {
         static let usesExtraTranslucentBackground = "ptn.usesExtraTranslucentBackground"
         static let hasPremiumSecretPass = "ptn.hasPremiumSecretPass"
         static let automaticStorageLastUpdateAt = "ptn.automaticStorageLastUpdateAt"
+        static let automaticStorageCalibrationVersion = "ptn.automaticStorageCalibrationVersion"
     }
 
     init(
@@ -150,6 +151,7 @@ final class AppStateStore: ObservableObject {
         ensurePullPlanRecordHistory()
         removeObsoleteReviewCompletionRewards()
         bootstrapInitialStateIfNeeded()
+        calibrateAutomaticStorageIfNeeded()
         refreshRewards()
     }
 
@@ -159,6 +161,15 @@ final class AppStateStore: ObservableObject {
 
     var totalDrawCountFloor: Int {
         Int(totalDrawCount.rounded(.down))
+    }
+
+    var automaticStorageFullAt: Date {
+        let lastUpdate = defaults.object(forKey: StorageKey.automaticStorageLastUpdateAt) as? Date ?? Date()
+        let cyclesToFull = RewardSchedule.automaticStorageCapacity
+            / RewardSchedule.automaticStorageBatchValue.crystals
+        return lastUpdate.addingTimeInterval(
+            RewardSchedule.automaticStorageInterval * Double(cyclesToFull)
+        )
     }
 
     var totalPlannedUpCount: Int {
@@ -866,6 +877,43 @@ final class AppStateStore: ObservableObject {
         totalCrystals += value.crystals
         totalBlueTickets += value.blueTickets
         totalRedTickets += value.redTickets
+    }
+
+    private func calibrateAutomaticStorageIfNeeded() {
+        let version = defaults.integer(forKey: StorageKey.automaticStorageCalibrationVersion)
+        if version < 1 {
+            defaults.set(
+                RewardSchedule.automaticStorageReferenceStart,
+                forKey: StorageKey.automaticStorageLastUpdateAt
+            )
+            defaults.set(1, forKey: StorageKey.automaticStorageCalibrationVersion)
+            return
+        }
+
+        // Version 2 moves the old noon anchor to the confirmed midnight anchor.
+        if version < 2 {
+            let oldAnchor = defaults.object(forKey: StorageKey.automaticStorageLastUpdateAt) as? Date
+                ?? RewardSchedule.automaticStorageReferenceStart
+            defaults.set(oldAnchor.addingTimeInterval(-12 * 60 * 60), forKey: StorageKey.automaticStorageLastUpdateAt)
+            defaults.set(2, forKey: StorageKey.automaticStorageCalibrationVersion)
+            return
+        }
+
+        // Version 3 applies the final 41-second calibration correction.
+        if version < 3 {
+            let oldAnchor = defaults.object(forKey: StorageKey.automaticStorageLastUpdateAt) as? Date
+                ?? RewardSchedule.automaticStorageReferenceStart
+            defaults.set(oldAnchor.addingTimeInterval(-41), forKey: StorageKey.automaticStorageLastUpdateAt)
+            defaults.set(3, forKey: StorageKey.automaticStorageCalibrationVersion)
+            return
+        }
+
+        // Version 4 removes the final one-second display offset.
+        guard version < 4 else { return }
+        let oldAnchor = defaults.object(forKey: StorageKey.automaticStorageLastUpdateAt) as? Date
+            ?? RewardSchedule.automaticStorageReferenceStart
+        defaults.set(oldAnchor.addingTimeInterval(-1), forKey: StorageKey.automaticStorageLastUpdateAt)
+        defaults.set(4, forKey: StorageKey.automaticStorageCalibrationVersion)
     }
 
     private func applyAutomaticStorage(now: Date) {

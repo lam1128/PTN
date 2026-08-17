@@ -467,7 +467,7 @@ struct MainWidgetView: View {
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             } else {
-                AutomaticStorageRowView()
+                AutomaticStorageRowView(fullAt: store.automaticStorageFullAt)
 
                 if !store.weeklyInspectionProgress.slots.isEmpty {
                     DailyProgressView(
@@ -1021,29 +1021,45 @@ private struct RewardRowView: View {
 }
 
 private struct AutomaticStorageRowView: View {
+    let fullAt: Date
+
     var body: some View {
-        HStack(spacing: 10) {
-            RewardCircle(
-                isFilled: true,
-                color: WidgetPalette.completed,
-                systemImage: "arrow.clockwise",
-                systemImageOffsetY: -1
-            )
-            .frame(width: 24, height: 24)
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            HStack(spacing: 10) {
+                RewardCircle(
+                    isFilled: true,
+                    color: WidgetPalette.completed,
+                    systemImage: "arrow.clockwise",
+                    systemImageOffsetY: -1
+                )
+                .frame(width: 24, height: 24)
 
-            Text(RewardSchedule.automaticStorageTitle)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(WidgetPalette.titlePrimary)
+                Text(RewardSchedule.automaticStorageTitle)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(WidgetPalette.titlePrimary)
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
 
-            Text(RewardSchedule.automaticStorageBatchValue.inlineDescription(withPlusSign: true))
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(WidgetPalette.accent)
+                Text(automaticStorageCountdown(until: fullAt, now: context.date))
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(WidgetPalette.accentSoft)
+
+                Text(RewardSchedule.automaticStorageBatchValue.inlineDescription(withPlusSign: true))
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(WidgetPalette.accent)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(11)
+            .widgetRoundedCard(fill: Color.white.opacity(0.18))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(11)
-        .widgetRoundedCard(fill: Color.white.opacity(0.18))
+    }
+
+    private func automaticStorageCountdown(until target: Date, now: Date) -> String {
+        let seconds = max(0, Int(target.timeIntervalSince(now).rounded(.up)))
+        let hours = seconds / 3_600
+        let minutes = (seconds % 3_600) / 60
+        let remainingSeconds = seconds % 60
+        return String(format: "%02d:%02d:%02d", hours, minutes, remainingSeconds)
     }
 }
 

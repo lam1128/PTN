@@ -283,6 +283,20 @@ enum RewardSchedule {
     static let automaticStorageTitle = "基地监管"
     static let automaticStorageBatchValue = RewardValue(crystals: 4)
     static let automaticStorageInterval: TimeInterval = 3 * 60 * 60 + 50 * 60 + 24
+    static let automaticStorageCapacity = 48
+    // Calibration: at 2026-08-18 00:02 (Europe/Berlin), the warehouse was 0/48.
+    static let automaticStorageReferenceStart: Date = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        return calendar.date(from: DateComponents(
+            year: 2026,
+            month: 8,
+            day: 17,
+            hour: 23,
+            minute: 50,
+            second: 12
+        ))!
+    }()
     static let automaticStorageHistoryKey = "automatic-storage"
 
     static let weeklySources: [RewardSourceDefinition] = [
