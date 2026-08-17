@@ -46,19 +46,22 @@ struct DailyProgressDefinition: Identifiable, Hashable {
     let slots: [DailyProgressSlotDefinition]
     let display: DailyProgressDisplay
     let showsCycleAdvanceButton: Bool
+    let rowCapacity: Int?
 
     init(
         id: String,
         title: String,
         slots: [DailyProgressSlotDefinition],
         display: DailyProgressDisplay,
-        showsCycleAdvanceButton: Bool = false
+        showsCycleAdvanceButton: Bool = false,
+        rowCapacity: Int? = nil
     ) {
         self.id = id
         self.title = title
         self.slots = slots
         self.display = display
         self.showsCycleAdvanceButton = showsCycleAdvanceButton
+        self.rowCapacity = rowCapacity
     }
 }
 
@@ -76,6 +79,7 @@ enum RewardSchedule {
         "每日固定": dailyFixedClaimSource,
         "派遣 第1项": "派遣·5异方晶",
         "派遣 第2项": "派遣·15异方晶",
+        // Keep the legacy history label accurate; new records use the configured 40 value.
         "派遣 第3项": "派遣·25异方晶",
         "服从度 第1项": "服从度·获得狂级禁闭者",
         "服从度 第2项": "服从度·狂级禁闭者40%",
@@ -119,7 +123,7 @@ enum RewardSchedule {
         RewardSourceDefinition(
             id: "daily-emotion-detection",
             title: "情绪检测",
-            value: RewardValue(crystals: 30)
+            value: RewardValue(crystals: 20)
         ),
         RewardSourceDefinition(
             id: "regulatory-event",
@@ -152,7 +156,7 @@ enum RewardSchedule {
         DailyProgressDefinition(
             id: dailyDispatchID,
             title: "派遣",
-            slots: [5, 15, 25].enumerated().map { index, value in
+            slots: [5, 15, 40].enumerated().map { index, value in
                 DailyProgressSlotDefinition(
                     id: "dispatch-\(index + 1)",
                     value: RewardValue(crystals: value),
@@ -282,9 +286,120 @@ enum RewardSchedule {
     static let automaticStorageHistoryKey = "automatic-storage"
 
     static let weeklySources: [RewardSourceDefinition] = [
-        RewardSourceDefinition(id: "weekly-inspection", title: "周监察任务", value: RewardValue(crystals: 150)),
         RewardSourceDefinition(id: "weekly-share", title: "每周分享", value: RewardValue(crystals: 60))
     ]
+
+    static let weeklyInspectionProgressDefinition = DailyProgressDefinition(
+        id: "weekly-inspection-progress",
+        title: "周监察任务",
+        slots: [20, 20, 20, 40, 50].enumerated().map { index, value in
+            DailyProgressSlotDefinition(
+                id: "weekly-inspection-\(index + 1)",
+                value: RewardValue(crystals: value),
+                historySources: ["周监察任务·第\(index + 1)项"],
+                maxCount: 1,
+                tint: .neutral,
+                completionBonus: .zero
+            )
+        },
+        display: .value
+    )
+
+    static let permanentProgressDefinitions: [DailyProgressDefinition] = [
+        makePermanentProgressDefinition(
+            id: "n9",
+            title: "N9",
+            values: Array(repeating: 70, count: 8) + Array(repeating: 35, count: 3) + Array(repeating: 20, count: 3),
+            labels: Array((1...8).map { Optional(String($0)) })
+                + Array(repeating: Optional("Re"), count: 3)
+                + Array(repeating: Optional("K"), count: 3),
+            sequentialUnlock: true,
+            rowCapacity: 7
+        ),
+        makePermanentProgressDefinition(
+            id: "n10",
+            title: "N10",
+            values: Array(repeating: 70, count: 8) + Array(repeating: 35, count: 3) + Array(repeating: 20, count: 3),
+            labels: Array((1...8).map { Optional(String($0)) })
+                + Array(repeating: Optional("Re"), count: 3)
+                + Array(repeating: Optional("K"), count: 3),
+            sequentialUnlock: true,
+            rowCapacity: 7
+        ),
+        makePermanentProgressDefinition(
+            id: "core-crisis-n9-n10",
+            title: "核心危机·N9N10",
+            values: [50, 50, 0, 50, 50, 0],
+            labels: ["2", "5", "8", "3", "6", "9"],
+            blueTicketIndices: [2, 5],
+            rowCapacity: 6
+        )
+    ]
+
+    private static func makePermanentProgressDefinition(
+        id: String,
+        title: String,
+        values: [Int],
+        labels: [String?],
+        showsCheckmark: [Bool] = [],
+        blueTicketIndices: Set<Int> = [],
+        sequentialUnlock: Bool = false,
+        rowCapacity: Int
+    ) -> DailyProgressDefinition {
+        DailyProgressDefinition(
+            id: id,
+            title: title,
+            slots: values.indices.map { index in
+                let value = blueTicketIndices.contains(index)
+                    ? RewardValue(blueTickets: 1)
+                    : RewardValue(crystals: values[index])
+                return DailyProgressSlotDefinition(
+                    id: "\(id)-\(index + 1)",
+                    value: value,
+                    labels: labels[index].map { [$0] } ?? [],
+                    historySources: [historySource(
+                        id: id,
+                        title: title,
+                        index: index,
+                        label: labels[index]
+                    )],
+                    maxCount: 1,
+                    tint: .neutral,
+                    completionBonus: .zero,
+                    showsCheckmark: showsCheckmark.indices.contains(index) && showsCheckmark[index],
+                    unlockedBySlotIndex: sequentialUnlock && index > 0 && index < 8
+                        ? index
+                        : labels[index] == "K" ? index - 5 : nil
+                )
+            },
+            display: .value,
+            rowCapacity: rowCapacity
+        )
+    }
+
+    private static func historySource(
+        id: String,
+        title: String,
+        index: Int,
+        label: String?
+    ) -> String {
+        if id == "n9" || id == "n10" {
+            if index < 8 {
+                return "\(title)·第\(index + 1)关"
+            }
+            if index < 11 {
+                return "\(title)·困难\(index - 7)"
+            }
+            return "\(title)·Re\(index - 10)"
+        }
+
+        if id == "core-crisis-n9-n10", let label {
+            let denominator = ["2", "5", "8"].contains(label) ? 8 : 9
+            return "\(title)·\(label)/\(denominator)"
+        }
+
+        return "\(title)·\(label ?? "第\(index + 1)项")"
+    }
 
     static let monthlySources: [RewardSourceDefinition] = [
         RewardSourceDefinition(id: "shop-exchange", title: "商店兑换", value: RewardValue(blueTickets: 8, redTickets: 5))
@@ -587,6 +702,8 @@ enum RewardSchedule {
         slotCount: 6,
         showsCycleAdvanceButton: false
     )
+    static let secretPassPremiumThirdBonus = RewardValue(crystals: 200)
+    static let secretPassPremiumSecondLastBonus = RewardValue(crystals: 680)
     static let secretPassSeasonEnd = DayStamp(year: 2026, month: 9, day: 14)
     static let secretPassSeasonEndHour = 4
     static let secretPassSeasonEndMinute = 59

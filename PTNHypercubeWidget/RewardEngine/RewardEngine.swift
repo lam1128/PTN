@@ -6,6 +6,8 @@ struct RewardSnapshot {
     let manualUnknownRewards: [ManualUnknownReward]
     let dailyExtraRewards: [RewardItem]
     let dailyProgresses: [DailyProgress]
+    let weeklyInspectionProgress: DailyProgress
+    let permanentProgresses: [DailyProgress]
     let secretPassProgress: SecretPassProgress
     let miniGameProgress: SecretPassProgress
     let redemptionCodeProgress: SecretPassProgress
@@ -54,6 +56,20 @@ struct RewardEngine {
                 claimedKeys: claimedKeys,
                 dailyCycleVersions: dailyCycleVersions
             ),
+            weeklyInspectionProgress: makeProgress(
+                definition: RewardSchedule.weeklyInspectionProgressDefinition,
+                cycleKey: weekStart(for: today).key,
+                claimedKeys: claimedKeys,
+                dailyCycleVersions: dailyCycleVersions
+            ),
+            permanentProgresses: RewardSchedule.permanentProgressDefinitions.map {
+                makeProgress(
+                    definition: $0,
+                    cycleKey: $0.id,
+                    claimedKeys: claimedKeys,
+                    dailyCycleVersions: [:]
+                )
+            },
             secretPassProgress: makeSecretPassProgress(
                 now: currentDate,
                 claimedKeys: claimedKeys,
@@ -210,42 +226,67 @@ struct RewardEngine {
         claimedKeys: Set<String>,
         dailyCycleVersions: [String: Int]
     ) -> [DailyProgress] {
-        RewardSchedule.dailyProgressDefinitions.map { definition in
-            let slots = definition.slots.enumerated().map { offset, slotDefinition in
-                let index = offset + 1
-                let cycleID = "\(definition.id)-\(day.key)-\(slotDefinition.id)"
-                let cycleVersion = dailyCycleVersions[cycleID] ?? 0
-                let versionSuffix = cycleVersion == 0 ? "" : "-v\(cycleVersion)"
-                let claimPrefix = "\(cycleID)\(versionSuffix)"
-                let claimKeys = (1...slotDefinition.maxCount).map { count in
-                    "\(claimPrefix)-\(count)"
-                }
-                let completionClaimKey = slotDefinition.completionBonus.isZero
-                    ? nil
-                    : "\(claimPrefix)-completion"
-                return DailyProgressSlot(
-                    id: cycleID,
-                    index: index,
-                    value: slotDefinition.value,
-                    claimKeys: claimKeys,
-                    count: claimKeys.filter { claimedKeys.contains($0) }.count,
-                    rewardValues: slotDefinition.rewardValues,
-                    labels: slotDefinition.labels,
-                    historySources: slotDefinition.historySources,
-                    tint: slotDefinition.tint,
-                    completionBonus: slotDefinition.completionBonus,
-                    completionClaimKey: completionClaimKey,
-                    isCompletionClaimed: completionClaimKey.map { claimedKeys.contains($0) } ?? false
-                )
-            }
-            return DailyProgress(
-                id: definition.id,
-                title: definition.title,
-                slots: slots,
-                display: definition.display,
-                showsCycleAdvanceButton: definition.showsCycleAdvanceButton
+        RewardSchedule.dailyProgressDefinitions.map {
+            makeProgress(
+                definition: $0,
+                cycleKey: day.key,
+                claimedKeys: claimedKeys,
+                dailyCycleVersions: dailyCycleVersions
             )
         }
+    }
+
+    private func makeProgress(
+        definition: DailyProgressDefinition,
+        cycleKey: String,
+        claimedKeys: Set<String>,
+        dailyCycleVersions: [String: Int]
+    ) -> DailyProgress {
+        let slots = definition.slots.enumerated().map { offset, slotDefinition in
+            let index = offset + 1
+            let cycleID = "\(definition.id)-\(cycleKey)-\(slotDefinition.id)"
+            let cycleVersion = dailyCycleVersions[cycleID] ?? 0
+            let versionSuffix = cycleVersion == 0 ? "" : "-v\(cycleVersion)"
+            let claimPrefix = "\(cycleID)\(versionSuffix)"
+            let claimKeys = (1...slotDefinition.maxCount).map { count in
+                "\(claimPrefix)-\(count)"
+            }
+            let completionClaimKey = slotDefinition.completionBonus.isZero
+                ? nil
+                : "\(claimPrefix)-completion"
+            let prerequisiteKey = slotDefinition.unlockedBySlotIndex.flatMap { prerequisiteIndex -> String? in
+                guard definition.slots.indices.contains(prerequisiteIndex - 1) else { return nil }
+                let prerequisite = definition.slots[prerequisiteIndex - 1]
+                let prerequisiteID = "\(definition.id)-\(cycleKey)-\(prerequisite.id)"
+                let prerequisiteVersion = dailyCycleVersions[prerequisiteID] ?? 0
+                let prerequisiteSuffix = prerequisiteVersion == 0 ? "" : "-v\(prerequisiteVersion)"
+                return "\(prerequisiteID)\(prerequisiteSuffix)-1"
+            }
+            return DailyProgressSlot(
+                id: cycleID,
+                index: index,
+                value: slotDefinition.value,
+                claimKeys: claimKeys,
+                count: claimKeys.filter { claimedKeys.contains($0) }.count,
+                rewardValues: slotDefinition.rewardValues,
+                labels: slotDefinition.labels,
+                historySources: slotDefinition.historySources,
+                tint: slotDefinition.tint,
+                completionBonus: slotDefinition.completionBonus,
+                completionClaimKey: completionClaimKey,
+                isCompletionClaimed: completionClaimKey.map { claimedKeys.contains($0) } ?? false,
+                showsCheckmark: slotDefinition.showsCheckmark,
+                isUnlocked: prerequisiteKey.map { claimedKeys.contains($0) } ?? true
+            )
+        }
+        return DailyProgress(
+            id: definition.id,
+            title: definition.title,
+            slots: slots,
+            display: definition.display,
+            showsCycleAdvanceButton: definition.showsCycleAdvanceButton,
+            rowCapacity: definition.rowCapacity
+        )
     }
 
     private func makeDailyRewards(for day: DayStamp, claimedKeys: Set<String>) -> [RewardItem] {
@@ -387,7 +428,9 @@ struct RewardEngine {
 
             let claimKey = "dark-zone-season-\(season)"
             let isClaimed = claimedKeys.contains(claimKey)
-            if season == currentSeason || !isClaimed {
+            let isCurrentSeasonReward = season == currentSeason
+            let isUnclaimedPastSeasonReward = season < currentSeason && !isClaimed
+            if isCurrentSeasonReward || isUnclaimedPastSeasonReward {
                 let title = "暗域·第\(season)期赛季奖励"
                 rewards.append(
                     makeRewardItem(
@@ -495,7 +538,7 @@ struct RewardEngine {
         hasPremiumSecretPass: Bool
     ) -> SecretPassProgress {
         let definition = RewardSchedule.secretPassDefinition
-        return makeProgress(
+        var progress = makeProgress(
             id: definition.id,
             kind: definition.kind,
             title: definition.title,
@@ -517,6 +560,62 @@ struct RewardEngine {
             manualCycleVersions: manualCycleVersions,
             isPremiumPurchased: hasPremiumSecretPass,
             showsCycleAdvanceButton: definition.showsCycleAdvanceButton
+        )
+
+        guard hasPremiumSecretPass else { return progress }
+
+        // Premium adds two crystal rewards without changing the six legacy slot keys.
+        let thirdBonus = makePremiumSecretPassBonus(
+            id: definition.id,
+            version: progress.cycleVersion,
+            index: 3,
+            value: RewardSchedule.secretPassPremiumThirdBonus,
+            label: "200",
+            claimedKeys: claimedKeys
+        )
+        let secondLastBonus = makePremiumSecretPassBonus(
+            id: definition.id,
+            version: progress.cycleVersion,
+            index: 7,
+            value: RewardSchedule.secretPassPremiumSecondLastBonus,
+            label: "680",
+            claimedKeys: claimedKeys
+        )
+        progress = SecretPassProgress(
+            id: progress.id,
+            kind: progress.kind,
+            title: progress.title,
+            slotValue: progress.slotValue,
+            cycleVersion: progress.cycleVersion,
+            slots: Array(progress.slots.prefix(2)) + [thirdBonus]
+                + Array(progress.slots.dropFirst(2).prefix(3)) + [secondLastBonus]
+                + Array(progress.slots.suffix(1)),
+            remainingText: progress.remainingText,
+            isPremiumPurchased: progress.isPremiumPurchased,
+            showsCycleAdvanceButton: progress.showsCycleAdvanceButton
+        )
+        return progress
+    }
+
+    private func makePremiumSecretPassBonus(
+        id: String,
+        version: Int,
+        index: Int,
+        value: RewardValue,
+        label: String,
+        claimedKeys: Set<String>
+    ) -> SecretPassSlot {
+        let key = "\(id)-v\(version)-premium-bonus-\(value.crystals)"
+        return SecretPassSlot(
+            id: key,
+            index: index,
+            baseClaimKey: key,
+            premiumClaimKey: key,
+            rewardValue: value,
+            label: label,
+            isPremiumOnly: true,
+            isClaimed: claimedKeys.contains(key),
+            isUnlocked: true
         )
     }
 
@@ -748,6 +847,9 @@ struct RewardEngine {
                     index: index,
                     baseClaimKey: baseClaimKey,
                     premiumClaimKey: premiumClaimKey,
+                    rewardValue: nil,
+                    label: nil,
+                    isPremiumOnly: false,
                     isClaimed: claimedKeys.contains(baseClaimKey),
                     isUnlocked: unlockedSlotIndices?.contains(index) ?? true
                 )

@@ -292,6 +292,8 @@ struct DailyProgressSlotDefinition: Hashable {
     let maxCount: Int
     let tint: DailyProgressTint
     let completionBonus: RewardValue
+    let showsCheckmark: Bool
+    let unlockedBySlotIndex: Int?
 
     init(
         id: String,
@@ -301,7 +303,9 @@ struct DailyProgressSlotDefinition: Hashable {
         historySources: [String] = [],
         maxCount: Int,
         tint: DailyProgressTint,
-        completionBonus: RewardValue
+        completionBonus: RewardValue,
+        showsCheckmark: Bool = false,
+        unlockedBySlotIndex: Int? = nil
     ) {
         self.id = id
         self.value = value
@@ -311,6 +315,8 @@ struct DailyProgressSlotDefinition: Hashable {
         self.maxCount = maxCount
         self.tint = tint
         self.completionBonus = completionBonus
+        self.showsCheckmark = showsCheckmark
+        self.unlockedBySlotIndex = unlockedBySlotIndex
     }
 }
 
@@ -327,6 +333,8 @@ struct DailyProgressSlot: Identifiable, Hashable {
     let completionBonus: RewardValue
     let completionClaimKey: String?
     let isCompletionClaimed: Bool
+    let showsCheckmark: Bool
+    let isUnlocked: Bool
 
     var isClaimed: Bool {
         count > 0
@@ -371,6 +379,7 @@ struct DailyProgress: Identifiable, Hashable {
     let slots: [DailyProgressSlot]
     let display: DailyProgressDisplay
     let showsCycleAdvanceButton: Bool
+    let rowCapacity: Int?
 
     var isCompleted: Bool {
         display != .count && slots.allSatisfy(\.isComplete)
@@ -514,6 +523,9 @@ struct SecretPassSlot: Identifiable, Hashable {
     let index: Int
     let baseClaimKey: String
     let premiumClaimKey: String
+    let rewardValue: RewardValue?
+    let label: String?
+    let isPremiumOnly: Bool
     let isClaimed: Bool
     let isUnlocked: Bool
 }

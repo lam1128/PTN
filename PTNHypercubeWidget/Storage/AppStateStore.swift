@@ -12,6 +12,8 @@ final class AppStateStore: ObservableObject {
     @Published private(set) var manualUnknownRewards: [ManualUnknownReward] = []
     @Published private(set) var dailyExtraRewards: [RewardItem] = []
     @Published private(set) var dailyProgresses: [DailyProgress] = []
+    @Published private(set) var weeklyInspectionProgress: DailyProgress
+    @Published private(set) var permanentProgresses: [DailyProgress]
     @Published private(set) var secretPassProgress: SecretPassProgress
     @Published private(set) var miniGameProgress: SecretPassProgress
     @Published private(set) var redemptionCodeProgress: SecretPassProgress
@@ -80,6 +82,15 @@ final class AppStateStore: ObservableObject {
         )
         self.hasPremiumSecretPass = defaults.object(forKey: StorageKey.hasPremiumSecretPass) as? Bool ?? false
         self.usesExtraTranslucentBackground = defaults.object(forKey: StorageKey.usesExtraTranslucentBackground) as? Bool ?? false
+        self.weeklyInspectionProgress = DailyProgress(
+            id: RewardSchedule.weeklyInspectionProgressDefinition.id,
+            title: RewardSchedule.weeklyInspectionProgressDefinition.title,
+            slots: [],
+            display: RewardSchedule.weeklyInspectionProgressDefinition.display,
+            showsCycleAdvanceButton: false,
+            rowCapacity: RewardSchedule.weeklyInspectionProgressDefinition.rowCapacity
+        )
+        self.permanentProgresses = []
         self.secretPassProgress = SecretPassProgress(
             id: RewardSchedule.secretPassDefinition.id,
             kind: RewardSchedule.secretPassDefinition.kind,
@@ -204,6 +215,8 @@ final class AppStateStore: ObservableObject {
         manualUnknownRewards = snapshot.manualUnknownRewards
         dailyExtraRewards = snapshot.dailyExtraRewards
         dailyProgresses = snapshot.dailyProgresses
+        weeklyInspectionProgress = snapshot.weeklyInspectionProgress
+        permanentProgresses = snapshot.permanentProgresses
         secretPassProgress = snapshot.secretPassProgress
         miniGameProgress = snapshot.miniGameProgress
         redemptionCodeProgress = snapshot.redemptionCodeProgress
@@ -314,18 +327,22 @@ final class AppStateStore: ObservableObject {
 
     func claimSecretPassSlot(_ slot: SecretPassSlot, now: Date = Date()) {
         let definition = RewardSchedule.secretPassDefinition
-        recordClaim(claimKey: slot.baseClaimKey, value: definition.slotValue, source: "\(definition.title) 第\(slot.index)抽", now: now)
+        let value = slot.rewardValue ?? definition.slotValue
+        recordClaim(claimKey: slot.baseClaimKey, value: value, source: "\(definition.title) 第\(slot.index)抽", now: now)
 
-        if hasPremiumSecretPass {
+        if hasPremiumSecretPass && !slot.isPremiumOnly {
             recordClaim(claimKey: slot.premiumClaimKey, value: definition.slotValue, source: "\(definition.title) 高级奖励 第\(slot.index)抽", now: now)
         }
     }
 
     func toggleSecretPassSlot(_ slot: SecretPassSlot, now: Date = Date()) {
         let definition = RewardSchedule.secretPassDefinition
+        let value = slot.rewardValue ?? definition.slotValue
         if claimedRewardKeys.contains(slot.baseClaimKey) {
-            unclaim(claimKey: slot.baseClaimKey, value: definition.slotValue, now: now)
-            unclaim(claimKey: slot.premiumClaimKey, value: definition.slotValue, now: now)
+            unclaim(claimKey: slot.baseClaimKey, value: value, now: now)
+            if !slot.isPremiumOnly {
+                unclaim(claimKey: slot.premiumClaimKey, value: definition.slotValue, now: now)
+            }
         } else {
             claimSecretPassSlot(slot, now: now)
         }
@@ -338,6 +355,16 @@ final class AppStateStore: ObservableObject {
         let definition = RewardSchedule.secretPassDefinition
 
         for slot in secretPassProgress.slots where claimedRewardKeys.contains(slot.baseClaimKey) {
+            if slot.isPremiumOnly {
+                if !hasPremiumSecretPass {
+                    unclaim(
+                        claimKey: slot.baseClaimKey,
+                        value: slot.rewardValue ?? .zero,
+                        now: now
+                    )
+                }
+                continue
+            }
             if hasPremiumSecretPass {
                 recordClaim(
                     claimKey: slot.premiumClaimKey,

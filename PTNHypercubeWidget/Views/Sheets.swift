@@ -49,6 +49,7 @@ struct EditInventorySheet: View {
                     .font(.subheadline.weight(.medium))
                 TextField("输入当前异方晶总数", text: $crystalDraft)
                     .textFieldStyle(.roundedBorder)
+                    .onSubmit(submit)
             }
 
             VStack(alignment: .leading, spacing: 10) {
@@ -56,6 +57,7 @@ struct EditInventorySheet: View {
                     .font(.subheadline.weight(.medium))
                 TextField("输入当前蓝票数", text: $blueTicketDraft)
                     .textFieldStyle(.roundedBorder)
+                    .onSubmit(submit)
             }
 
             VStack(alignment: .leading, spacing: 10) {
@@ -63,6 +65,7 @@ struct EditInventorySheet: View {
                     .font(.subheadline.weight(.medium))
                 TextField("输入当前红票数", text: $redTicketDraft)
                     .textFieldStyle(.roundedBorder)
+                    .onSubmit(submit)
             }
 
             HStack {
@@ -71,9 +74,7 @@ struct EditInventorySheet: View {
                 Spacer()
 
                 Button("保存") {
-                    if let parsedCrystals, let parsedBlueTickets, let parsedRedTickets {
-                        onSave(parsedCrystals, parsedBlueTickets, parsedRedTickets)
-                    }
+                    submit()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(
@@ -89,6 +90,19 @@ struct EditInventorySheet: View {
             }
         }
         .padding(18)
+    }
+
+    private func submit() {
+        guard let parsedCrystals, let parsedBlueTickets, let parsedRedTickets else { return }
+        let hasChanges = parsedCrystals != currentCrystals
+            || parsedBlueTickets != currentBlueTickets
+            || parsedRedTickets != currentRedTickets
+
+        if hasChanges {
+            onSave(parsedCrystals, parsedBlueTickets, parsedRedTickets)
+        } else {
+            onClose()
+        }
     }
 }
 

@@ -469,6 +469,16 @@ struct MainWidgetView: View {
             } else {
                 AutomaticStorageRowView()
 
+                if !store.weeklyInspectionProgress.slots.isEmpty {
+                    DailyProgressView(
+                        progress: store.weeklyInspectionProgress,
+                        onTapSlot: { slot in
+                            store.toggleDailyProgressSlot(store.weeklyInspectionProgress, slot: slot)
+                        },
+                        onAdvanceCycle: {}
+                    )
+                }
+
                 ForEach(visibleRewards) { reward in
                     RewardRowView(reward: reward) {
                         store.toggle(reward)
@@ -589,6 +599,16 @@ struct MainWidgetView: View {
                     reward: reward,
                     onClaim: { store.toggleManualUnknown(reward) },
                     onAdvanceCycle: { store.advanceManualCycle(for: reward.id) }
+                )
+            }
+
+            ForEach(store.permanentProgresses) { progress in
+                DailyProgressView(
+                    progress: progress,
+                    onTapSlot: { slot in
+                        store.toggleDailyProgressSlot(progress, slot: slot)
+                    },
+                    onAdvanceCycle: {}
                 )
             }
         }
@@ -1148,16 +1168,14 @@ private struct SecretPassProgressView: View {
                 }
             }
 
-            HStack(spacing: 10) {
-                ForEach(progress.slots) { slot in
-                    Button(action: {
-                        onTapSlot(slot)
-                    }) {
-                        RewardCircle(isFilled: slot.isClaimed)
-                            .frame(width: 24, height: 24)
+            HStack(alignment: .center, spacing: 10) {
+                if progress.kind == .secretPass && progress.isPremiumPurchased {
+                    VStack(alignment: .leading, spacing: 10) {
+                        slotRow(progress.slots.prefix(4))
+                        slotRow(progress.slots.dropFirst(4))
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!slot.isUnlocked)
+                } else {
+                    slotRow(progress.slots)
                 }
 
                 Spacer(minLength: 0)
@@ -1174,6 +1192,22 @@ private struct SecretPassProgressView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(11)
         .widgetRoundedCard(fill: Color.white.opacity(0.16))
+    }
+
+    private func slotRow<S: RandomAccessCollection>(_ slots: S) -> some View
+    where S.Element == SecretPassSlot {
+        HStack(spacing: 10) {
+            ForEach(Array(slots)) { slot in
+                Button(action: {
+                    onTapSlot(slot)
+                }) {
+                        RewardCircle(isFilled: slot.isClaimed, label: slot.label)
+                        .frame(width: slot.label == nil ? 24 : 36, height: 24)
+                }
+                .buttonStyle(.plain)
+                .disabled(!slot.isUnlocked)
+            }
+        }
     }
 }
 
@@ -1267,12 +1301,17 @@ private struct RewardCircle: View {
     }
 
     var body: some View {
+        let isWideLabel = label?.count ?? 0 > 2
+        let shape: AnyShape = isWideLabel
+            ? AnyShape(RoundedRectangle(cornerRadius: 9))
+            : AnyShape(Circle())
+
         ZStack {
-            Circle()
+            shape
                 .fill(isFilled ? color : Color.clear)
 
-            Circle()
-                .strokeBorder(isFilled ? color : unfilledColor, lineWidth: 1.5)
+            shape
+                .stroke(isFilled ? color : unfilledColor, lineWidth: 1.5)
 
             if let label {
                 Text(label)
@@ -1285,8 +1324,8 @@ private struct RewardCircle: View {
                     .offset(y: systemImageOffsetY)
             }
         }
-        .frame(width: 18, height: 18)
-        .contentShape(Circle())
+        .frame(width: isWideLabel ? 30 : 18, height: 18)
+        .contentShape(isWideLabel ? AnyShape(RoundedRectangle(cornerRadius: 9)) : AnyShape(Circle()))
     }
 }
 
@@ -1304,19 +1343,43 @@ private struct DailyProgressView: View {
 
                 Spacer(minLength: 0)
 
+                if progress.rowCapacity != nil,
+                   progress.display == .value,
+                   !progress.showsCycleAdvanceButton {
+                    Text(progress.claimedValue.inlineDescription(withPlusSign: true))
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(WidgetPalette.accent)
+                }
+
                 if progress.showsCycleAdvanceButton {
                     ManualResetButton(action: onAdvanceCycle)
                 }
             }
 
-            HStack(spacing: 10) {
-                ForEach(progress.slots) { slot in
-                    slotButton(slot)
+            HStack(alignment: .center, spacing: 10) {
+                if let rowCapacity = progress.rowCapacity {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(progress.slots.chunked(into: rowCapacity), id: \.self) { row in
+                            HStack(spacing: 10) {
+                                ForEach(row) { slot in
+                                    slotButton(slot)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    HStack(spacing: 10) {
+                        ForEach(progress.slots) { slot in
+                            slotButton(slot)
+                        }
+                    }
                 }
 
                 Spacer(minLength: 0)
 
-                if progress.display == .value, !progress.showsCycleAdvanceButton {
+                if progress.rowCapacity == nil,
+                   progress.display == .value,
+                   !progress.showsCycleAdvanceButton {
                     Text(progress.claimedValue.inlineDescription(withPlusSign: true))
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundStyle(WidgetPalette.accent)
@@ -1336,12 +1399,15 @@ private struct DailyProgressView: View {
                 isFilled: slot.isDisplayedClaimed,
                 color: fillColor(for: slot),
                 unfilledColor: color(for: slot.tint),
-                label: progress.display == .value
+                label: slot.showsCheckmark
+                    ? nil
+                    : progress.display == .value
                     ? slot.displayLabel ?? "\(slot.value.crystals)"
                     : "\(slot.isCompletionClaimed ? 0 : slot.count)"
             )
         }
         .buttonStyle(.plain)
+        .disabled(!slot.isUnlocked)
         .frame(width: 24, height: 24)
         .contentShape(Circle())
     }
@@ -1365,6 +1431,15 @@ private struct DailyProgressView: View {
             return WidgetPalette.pink
         case .orange, .purple, .blue:
             return color(for: slot.tint)
+        }
+    }
+}
+
+private extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        guard size > 0 else { return [self] }
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
         }
     }
 }
