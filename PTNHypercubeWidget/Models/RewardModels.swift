@@ -283,6 +283,11 @@ enum DailyProgressTint: String, Hashable {
     case blue
 }
 
+enum DailyProgressSlotShape: String, Hashable {
+    case circle
+    case capsule
+}
+
 struct DailyProgressSlotDefinition: Hashable {
     let id: String
     let value: RewardValue
@@ -294,6 +299,7 @@ struct DailyProgressSlotDefinition: Hashable {
     let completionBonus: RewardValue
     let showsCheckmark: Bool
     let unlockedBySlotIndex: Int?
+    let shape: DailyProgressSlotShape?
 
     init(
         id: String,
@@ -305,7 +311,8 @@ struct DailyProgressSlotDefinition: Hashable {
         tint: DailyProgressTint,
         completionBonus: RewardValue,
         showsCheckmark: Bool = false,
-        unlockedBySlotIndex: Int? = nil
+        unlockedBySlotIndex: Int? = nil,
+        shape: DailyProgressSlotShape? = nil
     ) {
         self.id = id
         self.value = value
@@ -317,6 +324,7 @@ struct DailyProgressSlotDefinition: Hashable {
         self.completionBonus = completionBonus
         self.showsCheckmark = showsCheckmark
         self.unlockedBySlotIndex = unlockedBySlotIndex
+        self.shape = shape
     }
 }
 
@@ -335,6 +343,7 @@ struct DailyProgressSlot: Identifiable, Hashable {
     let isCompletionClaimed: Bool
     let showsCheckmark: Bool
     let isUnlocked: Bool
+    let shape: DailyProgressSlotShape?
 
     var isClaimed: Bool {
         count > 0

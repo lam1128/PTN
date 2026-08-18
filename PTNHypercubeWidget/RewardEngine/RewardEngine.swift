@@ -52,7 +52,7 @@ struct RewardEngine {
             ),
             dailyExtraRewards: makeDailyExtraRewards(for: today, claimedKeys: claimedKeys),
             dailyProgresses: makeDailyProgresses(
-                for: today,
+                for: currentDate,
                 claimedKeys: claimedKeys,
                 dailyCycleVersions: dailyCycleVersions
             ),
@@ -222,11 +222,12 @@ struct RewardEngine {
     }
 
     private func makeDailyProgresses(
-        for day: DayStamp,
+        for currentDate: Date,
         claimedKeys: Set<String>,
         dailyCycleVersions: [String: Int]
     ) -> [DailyProgress] {
-        RewardSchedule.dailyProgressDefinitions.map {
+        let day = DayStamp.rewardDay(from: currentDate, calendar: calendar)
+        var progresses = RewardSchedule.dailyProgressDefinitions.map {
             makeProgress(
                 definition: $0,
                 cycleKey: day.key,
@@ -234,13 +235,59 @@ struct RewardEngine {
                 dailyCycleVersions: dailyCycleVersions
             )
         }
+        if let dataGapProgress = makeDataGapProgress(
+            now: currentDate,
+            claimedKeys: claimedKeys,
+            dailyCycleVersions: dailyCycleVersions
+        ) {
+            progresses.append(dataGapProgress)
+        }
+        return progresses
+    }
+
+    private func makeDataGapProgress(
+        now: Date,
+        claimedKeys: Set<String>,
+        dailyCycleVersions: [String: Int]
+    ) -> DailyProgress? {
+        let definition = RewardSchedule.dataGapProgressDefinition
+        let start = preciseDate(
+            day: RewardSchedule.dataGapCurrentStart,
+            hour: RewardSchedule.dataGapCurrentStartHour,
+            minute: 0
+        )
+        let firstNextDay = calendar.date(byAdding: .day, value: 1, to: start) ?? start
+        let secondNextDay = calendar.date(byAdding: .day, value: 2, to: start) ?? start
+        let end = calendar.date(byAdding: .day, value: 3, to: start) ?? start
+        guard now >= start, now < end else { return nil }
+
+        var unlocked = Set([1, 2])
+        if now >= settingTime(on: firstNextDay, hour: RewardSchedule.dataGapCurrentUnlockHour) {
+            unlocked.formUnion([3, 4])
+        }
+        if now >= settingTime(on: secondNextDay, hour: RewardSchedule.dataGapCurrentUnlockHour) {
+            unlocked.formUnion([5, 6])
+        }
+
+        return makeProgress(
+            definition: definition,
+            cycleKey: RewardSchedule.dataGapCurrentStart.key,
+            claimedKeys: claimedKeys,
+            dailyCycleVersions: dailyCycleVersions,
+            unlockedSlotIndices: unlocked
+        )
+    }
+
+    private func settingTime(on date: Date, hour: Int) -> Date {
+        calendar.date(bySettingHour: hour, minute: 0, second: 0, of: date) ?? date
     }
 
     private func makeProgress(
         definition: DailyProgressDefinition,
         cycleKey: String,
         claimedKeys: Set<String>,
-        dailyCycleVersions: [String: Int]
+        dailyCycleVersions: [String: Int],
+        unlockedSlotIndices: Set<Int>? = nil
     ) -> DailyProgress {
         let slots = definition.slots.enumerated().map { offset, slotDefinition in
             let index = offset + 1
@@ -276,7 +323,9 @@ struct RewardEngine {
                 completionClaimKey: completionClaimKey,
                 isCompletionClaimed: completionClaimKey.map { claimedKeys.contains($0) } ?? false,
                 showsCheckmark: slotDefinition.showsCheckmark,
-                isUnlocked: prerequisiteKey.map { claimedKeys.contains($0) } ?? true
+                isUnlocked: unlockedSlotIndices?.contains(index)
+                    ?? prerequisiteKey.map { claimedKeys.contains($0) } ?? true,
+                shape: slotDefinition.shape
             )
         }
         return DailyProgress(

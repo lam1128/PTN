@@ -507,6 +507,9 @@ struct MainWidgetView: View {
         }
         let remainingProgressItems = [store.miniGameProgress, store.anniversarySignInProgress]
             .filter { !$0.slots.isEmpty }
+        let dataGapProgress = store.dailyProgresses.first {
+            $0.id == RewardSchedule.dataGapProgressID
+        }
 
         return VStack(alignment: .leading, spacing: 10) {
             sectionTitle("额外记录")
@@ -521,6 +524,16 @@ struct MainWidgetView: View {
 
             if !store.secretPassProgress.slots.isEmpty {
                 manualProgressView(for: store.secretPassProgress)
+            }
+
+            if let dataGapProgress {
+                DailyProgressView(
+                    progress: dataGapProgress,
+                    onTapSlot: { slot in
+                        store.toggleDailyProgressSlot(dataGapProgress, slot: slot)
+                    },
+                    onAdvanceCycle: {}
+                )
             }
 
             ForEach(dataGapRewards) { reward in
@@ -572,7 +585,9 @@ struct MainWidgetView: View {
 
         return VStack(alignment: .leading, spacing: 10) {
             // 常驻奖励不沉底：派遣和审查固定在最前面。
-            ForEach(store.dailyProgresses) { progress in
+            ForEach(store.dailyProgresses.filter {
+                $0.id != RewardSchedule.dataGapProgressID
+            }) { progress in
                 DailyProgressView(
                     progress: progress,
                     onTapSlot: { slot in
@@ -1299,6 +1314,7 @@ private struct RewardCircle: View {
     let label: String?
     let systemImage: String?
     let systemImageOffsetY: CGFloat
+    let shapeOverride: DailyProgressSlotShape?
 
     init(
         isFilled: Bool,
@@ -1306,7 +1322,8 @@ private struct RewardCircle: View {
         unfilledColor: Color = WidgetPalette.unchecked,
         label: String? = nil,
         systemImage: String? = nil,
-        systemImageOffsetY: CGFloat = 0
+        systemImageOffsetY: CGFloat = 0,
+        shapeOverride: DailyProgressSlotShape? = nil
     ) {
         self.isFilled = isFilled
         self.color = color
@@ -1314,11 +1331,14 @@ private struct RewardCircle: View {
         self.label = label
         self.systemImage = systemImage
         self.systemImageOffsetY = systemImageOffsetY
+        self.shapeOverride = shapeOverride
     }
 
     var body: some View {
-        let isWideLabel = label?.count ?? 0 > 2
-        let shape: AnyShape = isWideLabel
+        let isWideLabel = shapeOverride == .capsule || (shapeOverride == nil && (label?.count ?? 0 > 2))
+        let shape: AnyShape = shapeOverride == .circle
+            ? AnyShape(Circle())
+            : isWideLabel
             ? AnyShape(RoundedRectangle(cornerRadius: 9))
             : AnyShape(Circle())
 
@@ -1419,13 +1439,14 @@ private struct DailyProgressView: View {
                     ? nil
                     : progress.display == .value
                     ? slot.displayLabel ?? "\(slot.value.crystals)"
-                    : "\(slot.isCompletionClaimed ? 0 : slot.count)"
+                    : "\(slot.isCompletionClaimed ? 0 : slot.count)",
+                shapeOverride: slot.shape
             )
         }
         .buttonStyle(.plain)
         .disabled(!slot.isUnlocked)
-        .frame(width: 24, height: 24)
-        .contentShape(Circle())
+        .frame(width: slot.shape == .capsule ? 42 : 24, height: 24)
+        .contentShape(slot.shape == .capsule ? AnyShape(Capsule()) : AnyShape(Circle()))
     }
 
     private func color(for tint: DailyProgressTint) -> Color {

@@ -141,6 +141,7 @@ enum RewardSchedule {
     ]
     static let dailyDispatchID = "daily-dispatch"
     static let dailyReviewID = "daily-review"
+    static let dataGapProgressID = "data-gap-current"
     static let emotionRandomSourceID = "emotion-random"
     static let dataGapManualSourceID = "data-gap-future"
     static let bugFixRewardID = "bug-fix"
@@ -438,15 +439,29 @@ enum RewardSchedule {
     ]
 
     // 数据间隙只录入已知窗口；未知后续档期不做自动推算。
-    static let dataGapWindows: [DataGapWindow] = [
-        DataGapWindow(
-            id: "season-9-upper",
-            title: "数据间隙·第9赛季上半",
-            start: DayStamp(year: 2026, month: 8, day: 19),
-            days: 3,
-            dailyValue: RewardValue(crystals: 420)
-        )
-    ]
+    static let dataGapWindows: [DataGapWindow] = []
+
+    static let dataGapCurrentStart = DayStamp(year: 2026, month: 8, day: 18)
+    static let dataGapCurrentStartHour = 15
+    static let dataGapCurrentUnlockHour = 5
+    static let dataGapProgressDefinition = DailyProgressDefinition(
+        id: dataGapProgressID,
+        title: "数据间隙·第9赛季上半",
+        slots: [150, 330, 150, 330, 150, 330].enumerated().map { index, value in
+            DailyProgressSlotDefinition(
+                id: "data-gap-\(index + 1)",
+                value: RewardValue(crystals: value),
+                labels: [String(value)],
+                historySources: ["数据间隙·第9赛季上半 第\(index + 1)项"],
+                maxCount: 1,
+                tint: .neutral,
+                completionBonus: .zero,
+                shape: index.isMultiple(of: 2) ? .circle : .capsule
+            )
+        },
+        display: .value,
+        rowCapacity: 6
+    )
 
     // 这些来源奖励总量已知，但用户要求保留为手动领取，不自动推日期。
     static let manualUnknownSources: [ManualUnknownSourceDefinition] = [
@@ -454,12 +469,6 @@ enum RewardSchedule {
             id: emotionRandomSourceID,
             title: "情绪检测·随机一天",
             value: RewardValue(blueTickets: 1),
-            showsAdvanceCycleButton: false
-        ),
-        ManualUnknownSourceDefinition(
-            id: dataGapManualSourceID,
-            title: "数据间隙·第8赛季下",
-            value: RewardValue(crystals: 1260),
             showsAdvanceCycleButton: false
         ),
         ManualUnknownSourceDefinition(
