@@ -145,10 +145,12 @@ enum RewardSchedule {
     static let emotionRandomSourceID = "emotion-random"
     static let dataGapManualSourceID = "data-gap-future"
     static let bugFixRewardID = "bug-fix"
+    static let updateMaintenanceRewardID = "update-maintenance"
     static let randomQuestionnaireRewardID = "questionnaire-random"
     static let maintenanceRewardID = "maintenance-compensation"
     static let questionnaireRewardID = "new-version-questionnaire"
     static let permanentManualSourceOrder = [
+        updateMaintenanceRewardID,
         bugFixRewardID,
         randomQuestionnaireRewardID
     ]
@@ -157,7 +159,7 @@ enum RewardSchedule {
         DailyProgressDefinition(
             id: dailyDispatchID,
             title: "派遣",
-            slots: [5, 15, 40].enumerated().map { index, value in
+            slots: [15, 15, 40].enumerated().map { index, value in
                 DailyProgressSlotDefinition(
                     id: "dispatch-\(index + 1)",
                     value: RewardValue(crystals: value),
@@ -447,7 +449,7 @@ enum RewardSchedule {
     static let dataGapProgressDefinition = DailyProgressDefinition(
         id: dataGapProgressID,
         title: "数据间隙·第9赛季上半",
-        slots: [150, 330, 150, 330, 150, 330].enumerated().map { index, value in
+        slots: [150, 340, 160, 340, 110, 340].enumerated().map { index, value in
             DailyProgressSlotDefinition(
                 id: "data-gap-\(index + 1)",
                 value: RewardValue(crystals: value),
@@ -465,6 +467,11 @@ enum RewardSchedule {
 
     // 这些来源奖励总量已知，但用户要求保留为手动领取，不自动推日期。
     static let manualUnknownSources: [ManualUnknownSourceDefinition] = [
+        ManualUnknownSourceDefinition(
+            id: updateMaintenanceRewardID,
+            title: "更新维护",
+            value: RewardValue(crystals: 200)
+        ),
         ManualUnknownSourceDefinition(
             id: emotionRandomSourceID,
             title: "情绪检测·随机一天",

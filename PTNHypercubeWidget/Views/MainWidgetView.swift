@@ -150,6 +150,7 @@ struct MainWidgetView: View {
     private let refreshTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
     private let upPopupWidth: CGFloat = 150
     private let giftCodePopupWidth: CGFloat = 260
+    private let pullPlanPopupWidth: CGFloat = 260
 
     var body: some View {
         GeometryReader { geometry in
@@ -314,6 +315,40 @@ struct MainWidgetView: View {
                                 )
                             )
                             .zIndex(WidgetPopupLayer.popup)
+                    }
+                }
+            }
+            .overlayPreferenceValue(PullPlanSelectionAnchorPreferenceKey.self) { anchors in
+                GeometryReader { proxy in
+                    if let bannerID = expandedPullPlanBannerIDs.first,
+                       let anchor = anchors.first(where: { $0.id == bannerID }),
+                       let banner = RewardSchedule.pullPlanBanners.first(where: { $0.id == bannerID }) {
+                        PullPlanSelectionPopup(
+                            banner: banner,
+                            selectedUpCharacter: store.selectedPullPlanUpChoices[banner.id],
+                            selectedLockLevel: store.selectedPullPlanLockChoices[banner.id],
+                            onToggleUpCharacter: { character in
+                                store.togglePullPlanUpChoice(bannerID: banner.id, character: character)
+                                expandedPullPlanBannerIDs.removeAll()
+                            },
+                            onToggleLockLevel: { lockLevel in
+                                store.togglePullPlanLockChoice(bannerID: banner.id, lockLevel: lockLevel)
+                                expandedPullPlanBannerIDs.removeAll()
+                            }
+                        )
+                        .offset(
+                            x: popupOriginX(
+                                anchorX: proxy[anchor.anchor].minX,
+                                popupWidth: pullPlanPopupWidth,
+                                totalWidth: proxy.size.width
+                            ),
+                            y: popupOriginY(
+                                anchor: proxy[anchor.anchor],
+                                popupHeight: pullPlanPopupHeight(for: banner),
+                                totalHeight: proxy.size.height
+                            )
+                        )
+                        .zIndex(WidgetPopupLayer.popup)
                     }
                 }
             }
@@ -906,6 +941,13 @@ struct MainWidgetView: View {
         return max(padding, anchor.minY - popupHeight - spacing)
     }
 
+    private func pullPlanPopupHeight(for banner: PullPlanBanner) -> CGFloat {
+        let rowCount = banner.selectionKind == .lockCount
+            ? 3
+            : max(1, Int(ceil(Double(banner.characters.count) / 2.0)))
+        return 20 + CGFloat(rowCount * 32) + CGFloat(max(rowCount - 1, 0) * 8)
+    }
+
     private func primaryTabButton(_ section: PrimarySection, title: String) -> some View {
         Button {
             isUpListExpanded = false
@@ -1375,7 +1417,11 @@ private struct DailyProgressView: View {
             HStack(spacing: 8) {
                 Text(progress.title)
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(WidgetPalette.titlePrimary)
+                    .foregroundStyle(
+                        progress.isCompleted
+                            ? WidgetPalette.claimed
+                            : WidgetPalette.titlePrimary
+                    )
 
                 Spacer(minLength: 0)
 
@@ -1384,7 +1430,11 @@ private struct DailyProgressView: View {
                    !progress.showsCycleAdvanceButton {
                     Text(progress.claimedValue.inlineDescription(withPlusSign: true))
                         .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .foregroundStyle(WidgetPalette.accent)
+                        .foregroundStyle(
+                            progress.isCompleted
+                                ? WidgetPalette.claimed
+                                : WidgetPalette.accent
+                        )
                 }
 
                 if progress.showsCycleAdvanceButton {
@@ -1418,7 +1468,11 @@ private struct DailyProgressView: View {
                    !progress.showsCycleAdvanceButton {
                     Text(progress.claimedValue.inlineDescription(withPlusSign: true))
                         .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .foregroundStyle(WidgetPalette.accent)
+                        .foregroundStyle(
+                            progress.isCompleted
+                                ? WidgetPalette.claimed
+                                : WidgetPalette.accent
+                        )
                 }
             }
         }
@@ -1529,6 +1583,10 @@ private struct PullPlanBannerCardView: View {
                                 )
                             }
                             .buttonStyle(.plain)
+                            .anchorPreference(
+                                key: PullPlanSelectionAnchorPreferenceKey.self,
+                                value: .bounds
+                            ) { [PullPlanSelectionAnchor(id: banner.id, anchor: $0)] }
                         }
 
                         Spacer(minLength: 0)
@@ -1555,13 +1613,6 @@ private struct PullPlanBannerCardView: View {
                             .frame(width: 34, alignment: .trailing)
                             .padding(.trailing, 4)
                     }
-            }
-            .overlay(alignment: .topLeading) {
-                if banner.supportsPopupSelection && isExpanded {
-                    selectionPopup
-                        .offset(x: 0, y: 38)
-                        .zIndex(WidgetPopupLayer.popup)
-                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1686,50 +1737,54 @@ private struct PullPlanBannerCardView: View {
         .disabled(progress != .completed)
     }
 
-    private var selectionPopup: some View {
-        WidgetPopupContainer(
-            cornerRadius: 14,
-            fill: Color.white.opacity(0.84),
-            shadowColor: Color.black.opacity(0.08),
-            shadowRadius: 10,
-            shadowY: 4
-        ) {
-            selectionPopupContent
-        }
-    }
+}
 
-    private var selectionPopupContent: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            switch banner.selectionKind {
-            case .targetChoice:
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], alignment: .leading, spacing: 8) {
+private struct PullPlanSelectionPopup: View {
+    let banner: PullPlanBanner
+    let selectedUpCharacter: String?
+    let selectedLockLevel: Int?
+    let onToggleUpCharacter: (String) -> Void
+    let onToggleLockLevel: (Int) -> Void
+
+    var body: some View {
+        WidgetPopupContainer(
+            cornerRadius: 22,
+            fill: WidgetPalette.overlayFill,
+            shadowColor: WidgetPalette.accentSoft.opacity(0.12),
+            shadowRadius: 12,
+            shadowY: 5
+        ) {
+            LazyVGrid(
+                columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)],
+                alignment: .leading,
+                spacing: 8
+            ) {
+                switch banner.selectionKind {
+                case .targetChoice:
                     ForEach(banner.characters, id: \.self) { character in
                         selectionButton(
                             title: character,
                             isSelected: selectedUpCharacter == character
                         ) {
                             onToggleUpCharacter(character)
-                            onToggleExpand()
                         }
                     }
-                }
-            case .lockCount:
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], alignment: .leading, spacing: 8) {
+                case .lockCount:
                     ForEach(0...5, id: \.self) { lockLevel in
                         selectionButton(
                             title: "\(lockLevel)锁",
                             isSelected: selectedLockLevel == lockLevel
                         ) {
                             onToggleLockLevel(lockLevel)
-                            onToggleExpand()
                         }
                     }
+                case .none:
+                    EmptyView()
                 }
-            case .none:
-                EmptyView()
             }
+            .padding(10)
+            .frame(width: 260, alignment: .leading)
         }
-        .padding(10)
     }
 
     private func selectionButton(
@@ -1989,6 +2044,22 @@ private struct GiftCodeChevronAnchorPreferenceKey: PreferenceKey {
     static let defaultValue: [Anchor<CGRect>] = []
 
     static func reduce(value: inout [Anchor<CGRect>], nextValue: () -> [Anchor<CGRect>]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+private struct PullPlanSelectionAnchor {
+    let id: String
+    let anchor: Anchor<CGRect>
+}
+
+private struct PullPlanSelectionAnchorPreferenceKey: PreferenceKey {
+    static let defaultValue: [PullPlanSelectionAnchor] = []
+
+    static func reduce(
+        value: inout [PullPlanSelectionAnchor],
+        nextValue: () -> [PullPlanSelectionAnchor]
+    ) {
         value.append(contentsOf: nextValue())
     }
 }
