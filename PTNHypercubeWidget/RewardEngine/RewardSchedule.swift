@@ -748,6 +748,15 @@ enum RewardSchedule {
         showsCycleAdvanceButton: true
     )
 
+    static let photoExchangeDefinition = ProgressModuleDefinition(
+        kind: .photoExchange,
+        id: "photo-exchange",
+        title: "留影兑换",
+        slotValue: RewardValue(crystals: -150),
+        slotCount: 3,
+        showsCycleAdvanceButton: true
+    )
+
     static let mainlineSignInDefinition = ProgressModuleDefinition(
         kind: .mainlineSignIn,
         id: "mainline-sign-in",

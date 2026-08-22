@@ -262,6 +262,83 @@ struct PullPlanTicketRecordSheet: View {
     }
 }
 
+struct CrystalAdjustmentSheet<ProgressContent: View>: View {
+    let title: String
+    @ViewBuilder let progressContent: () -> ProgressContent
+    let onSave: (String, Int) -> Void
+    let onClose: () -> Void
+
+    @State private var sourceDraft = ""
+    @State private var crystalsDraft = ""
+
+    private var crystals: Int {
+        Int(crystalsDraft.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+    }
+
+    private var canConfirm: Bool {
+        !sourceDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && crystals > 0
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            panelHeader(title, onClose: onClose)
+
+            progressContent()
+
+            HStack(spacing: 10) {
+                inputField("记录项", text: $sourceDraft, placeholder: "记录项")
+                inputField("异方晶", text: $crystalsDraft, placeholder: "0")
+            }
+
+            HStack {
+                Button("取消", action: onClose)
+
+                Spacer()
+
+                Button("确认") {
+                    submit()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(WidgetPalette.pink)
+                .disabled(!canConfirm)
+            }
+        }
+        .padding(16)
+        .onChange(of: crystalsDraft) { _, value in
+            crystalsDraft = filteredNumber(value)
+        }
+    }
+
+    private func inputField(
+        _ title: String,
+        text: Binding<String>,
+        placeholder: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(WidgetPalette.titlePrimary)
+
+            TextField(placeholder, text: text)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(submit)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func submit() {
+        guard canConfirm else { return }
+        onSave(
+            sourceDraft.trimmingCharacters(in: .whitespacesAndNewlines),
+            crystals
+        )
+    }
+
+    private func filteredNumber(_ value: String) -> String {
+        String(value.filter(\.isNumber).prefix(7))
+    }
+}
+
 struct HistorySheetView: View {
     @ObservedObject var store: AppStateStore
     let onClose: () -> Void

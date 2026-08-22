@@ -16,6 +16,7 @@ final class AppStateStore: ObservableObject {
     @Published private(set) var permanentProgresses: [DailyProgress]
     @Published private(set) var secretPassProgress: SecretPassProgress
     @Published private(set) var miniGameProgress: SecretPassProgress
+    @Published private(set) var photoExchangeProgress: SecretPassProgress
     @Published private(set) var redemptionCodeProgress: SecretPassProgress
     @Published private(set) var mainlineSignInProgress: SecretPassProgress
     @Published private(set) var anniversarySignInProgress: SecretPassProgress
@@ -113,6 +114,17 @@ final class AppStateStore: ObservableObject {
             remainingText: nil,
             isPremiumPurchased: false,
             showsCycleAdvanceButton: RewardSchedule.miniGameDefinition.showsCycleAdvanceButton
+        )
+        self.photoExchangeProgress = SecretPassProgress(
+            id: RewardSchedule.photoExchangeDefinition.id,
+            kind: RewardSchedule.photoExchangeDefinition.kind,
+            title: RewardSchedule.photoExchangeDefinition.title,
+            slotValue: RewardSchedule.photoExchangeDefinition.slotValue,
+            cycleVersion: 0,
+            slots: [],
+            remainingText: nil,
+            isPremiumPurchased: false,
+            showsCycleAdvanceButton: RewardSchedule.photoExchangeDefinition.showsCycleAdvanceButton
         )
         self.redemptionCodeProgress = SecretPassProgress(
             id: RewardSchedule.redemptionCodeDefinition.id,
@@ -230,6 +242,7 @@ final class AppStateStore: ObservableObject {
         permanentProgresses = snapshot.permanentProgresses
         secretPassProgress = snapshot.secretPassProgress
         miniGameProgress = snapshot.miniGameProgress
+        photoExchangeProgress = snapshot.photoExchangeProgress
         redemptionCodeProgress = snapshot.redemptionCodeProgress
         mainlineSignInProgress = snapshot.mainlineSignInProgress
         anniversarySignInProgress = snapshot.anniversarySignInProgress
@@ -309,6 +322,33 @@ final class AppStateStore: ObservableObject {
                     now: now
                 )
             }
+        }
+    }
+
+    func toggleDailyReviewStage(
+        _ progress: DailyProgress,
+        slot: DailyProgressSlot,
+        stage: Int,
+        now: Date = Date()
+    ) {
+        guard progress.id == RewardSchedule.dailyReviewID,
+              slot.rewardValues.indices.contains(stage),
+              slot.claimKeys.indices.contains(stage) else { return }
+
+        let claimKey = slot.claimKeys[stage]
+        let value = slot.rewardValues[stage]
+        if claimedRewardKeys.contains(claimKey) {
+            unclaim(claimKey: claimKey, value: value, now: now)
+        } else {
+            recordClaim(
+                claimKey: claimKey,
+                value: value,
+                source: slot.historySource(
+                    moduleTitle: progress.title,
+                    rewardIndex: stage
+                ),
+                now: now
+            )
         }
     }
 
@@ -414,6 +454,38 @@ final class AppStateStore: ObservableObject {
             source: "\(definition.title) 第\(slot.index)关",
             now: now
         )
+    }
+
+    func togglePhotoExchangeSlot(_ slot: SecretPassSlot, now: Date = Date()) {
+        let definition = RewardSchedule.photoExchangeDefinition
+        toggleStandardProgressSlot(
+            slot,
+            value: definition.slotValue,
+            source: "\(definition.title) 第\(slot.index)项",
+            now: now
+        )
+    }
+
+    func recordManualCrystalAdjustment(
+        title: String,
+        crystals: Int,
+        now: Date = Date()
+    ) {
+        guard crystals != 0 else { return }
+
+        let value = RewardValue(crystals: crystals)
+        apply(value: value)
+        history.insert(
+            HistoryEntry(
+                timestamp: now,
+                source: title,
+                value: value,
+                claimKey: nil
+            ),
+            at: 0
+        )
+        persist()
+        refreshRewards(now: now)
     }
 
     func toggleMainlineSignInSlot(

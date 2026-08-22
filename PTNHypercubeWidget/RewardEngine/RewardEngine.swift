@@ -10,6 +10,7 @@ struct RewardSnapshot {
     let permanentProgresses: [DailyProgress]
     let secretPassProgress: SecretPassProgress
     let miniGameProgress: SecretPassProgress
+    let photoExchangeProgress: SecretPassProgress
     let redemptionCodeProgress: SecretPassProgress
     let mainlineSignInProgress: SecretPassProgress
     let anniversarySignInProgress: SecretPassProgress
@@ -77,6 +78,10 @@ struct RewardEngine {
                 hasPremiumSecretPass: hasPremiumSecretPass
             ),
             miniGameProgress: makeMiniGameProgress(
+                claimedKeys: claimedKeys,
+                manualCycleVersions: manualCycleVersions
+            ),
+            photoExchangeProgress: makePhotoExchangeProgress(
                 claimedKeys: claimedKeys,
                 manualCycleVersions: manualCycleVersions
             ),
@@ -314,6 +319,7 @@ struct RewardEngine {
                 index: index,
                 value: slotDefinition.value,
                 claimKeys: claimKeys,
+                claimedStages: claimKeys.map { claimedKeys.contains($0) },
                 count: claimKeys.filter { claimedKeys.contains($0) }.count,
                 rewardValues: slotDefinition.rewardValues,
                 labels: slotDefinition.labels,
@@ -673,6 +679,25 @@ struct RewardEngine {
         manualCycleVersions: [String: Int]
     ) -> SecretPassProgress {
         let definition = RewardSchedule.miniGameDefinition
+        return makeProgress(
+            id: definition.id,
+            kind: definition.kind,
+            title: definition.title,
+            slotValue: definition.slotValue,
+            slotCount: definition.slotCount,
+            remainingText: nil,
+            claimedKeys: claimedKeys,
+            manualCycleVersions: manualCycleVersions,
+            isPremiumPurchased: false,
+            showsCycleAdvanceButton: definition.showsCycleAdvanceButton
+        )
+    }
+
+    private func makePhotoExchangeProgress(
+        claimedKeys: Set<String>,
+        manualCycleVersions: [String: Int]
+    ) -> SecretPassProgress {
+        let definition = RewardSchedule.photoExchangeDefinition
         return makeProgress(
             id: definition.id,
             kind: definition.kind,

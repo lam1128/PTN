@@ -628,6 +628,11 @@ struct MainWidgetView: View {
                     onTapSlot: { slot in
                         store.toggleDailyProgressSlot(progress, slot: slot)
                     },
+                    onTapReviewStage: progress.id == RewardSchedule.dailyReviewID
+                        ? { slot, stage in
+                            store.toggleDailyReviewStage(progress, slot: slot, stage: stage)
+                        }
+                        : nil,
                     onAdvanceCycle: {
                         store.advanceDailyProgress(progress)
                     }
@@ -743,6 +748,16 @@ struct MainWidgetView: View {
             }
             .buttonStyle(.bordered)
 
+            Button("消耗") {
+                activeSheet = .consumption
+            }
+            .buttonStyle(.bordered)
+
+            Button("增加") {
+                activeSheet = .increase
+            }
+            .buttonStyle(.bordered)
+
             Spacer(minLength: 0)
 
             if let todayTotal = store.todayCrystalEquivalentText {
@@ -770,6 +785,8 @@ struct MainWidgetView: View {
                     store.toggleRedemptionCodeSlot(progress, slot: slot)
                 case .miniGame:
                     store.toggleMiniGameSlot(slot)
+                case .photoExchange:
+                    store.togglePhotoExchangeSlot(slot)
                 case .mainlineSignIn:
                     store.toggleMainlineSignInSlot(progress, slot: slot)
                 case .anniversarySignIn:
@@ -1010,6 +1027,51 @@ struct MainWidgetView: View {
                 }
             }
             .frame(width: 310, height: 350)
+        case .consumption:
+            WidgetPopupContainer {
+                CrystalAdjustmentSheet(
+                    title: "消耗",
+                    progressContent: {
+                        SecretPassProgressView(
+                            progress: store.photoExchangeProgress,
+                            onTapSlot: { slot in
+                                store.togglePhotoExchangeSlot(slot)
+                            },
+                            onTogglePremiumPurchased: nil,
+                            onAdvanceCycle: {
+                                store.advanceManualCycle(for: RewardSchedule.photoExchangeDefinition.id)
+                            },
+                            isGiftCodeListExpanded: false,
+                            onToggleGiftCodeList: nil
+                        )
+                    },
+                    onSave: { title, crystals in
+                        store.recordManualCrystalAdjustment(
+                            title: "消耗·\(title)",
+                            crystals: -crystals
+                        )
+                        activeSheet = nil
+                    },
+                    onClose: { activeSheet = nil }
+                )
+            }
+            .frame(width: 310)
+        case .increase:
+            WidgetPopupContainer {
+                CrystalAdjustmentSheet(
+                    title: "增加",
+                    progressContent: { EmptyView() },
+                    onSave: { title, crystals in
+                        store.recordManualCrystalAdjustment(
+                            title: "增加·\(title)",
+                            crystals: crystals
+                        )
+                        activeSheet = nil
+                    },
+                    onClose: { activeSheet = nil }
+                )
+            }
+            .frame(width: 310)
         case .pullPlanRecord(let bannerID):
             let record = store.pullPlanTicketRecord(for: bannerID)
             WidgetPopupContainer {
@@ -1410,7 +1472,20 @@ private struct RewardCircle: View {
 private struct DailyProgressView: View {
     let progress: DailyProgress
     let onTapSlot: (DailyProgressSlot) -> Void
+    let onTapReviewStage: ((DailyProgressSlot, Int) -> Void)?
     let onAdvanceCycle: () -> Void
+
+    init(
+        progress: DailyProgress,
+        onTapSlot: @escaping (DailyProgressSlot) -> Void,
+        onTapReviewStage: ((DailyProgressSlot, Int) -> Void)? = nil,
+        onAdvanceCycle: @escaping () -> Void
+    ) {
+        self.progress = progress
+        self.onTapSlot = onTapSlot
+        self.onTapReviewStage = onTapReviewStage
+        self.onAdvanceCycle = onAdvanceCycle
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1443,7 +1518,15 @@ private struct DailyProgressView: View {
             }
 
             HStack(alignment: .center, spacing: 10) {
-                if let rowCapacity = progress.rowCapacity {
+        if progress.id == RewardSchedule.dailyReviewID {
+                    HStack(spacing: 10) {
+                        ForEach(progress.slots) { slot in
+                            ForEach(0..<slot.maxCount, id: \.self) { stage in
+                                reviewStageButton(slot, stage: stage)
+                            }
+                        }
+                    }
+                } else if let rowCapacity = progress.rowCapacity {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(progress.slots.chunked(into: rowCapacity), id: \.self) { row in
                             HStack(spacing: 10) {
@@ -1479,6 +1562,26 @@ private struct DailyProgressView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(11)
         .widgetRoundedCard(fill: Color.white.opacity(0.16))
+    }
+
+    private func reviewStageButton(_ slot: DailyProgressSlot, stage: Int) -> some View {
+        Button {
+            if let onTapReviewStage {
+                onTapReviewStage(slot, stage)
+            } else {
+                onTapSlot(slot)
+            }
+        } label: {
+            RewardCircle(
+                isFilled: slot.isStageClaimed(at: stage),
+                color: fillColor(for: slot),
+                unfilledColor: color(for: slot.tint),
+                label: "\(slot.rewardValues[stage].crystals)"
+            )
+        }
+        .buttonStyle(.plain)
+        .frame(width: 24, height: 24)
+        .contentShape(Circle())
     }
 
     private func slotButton(_ slot: DailyProgressSlot) -> some View {
@@ -2074,12 +2177,16 @@ private enum PrimarySection: String {
 private enum ActiveSheet: Identifiable, Equatable {
     case editInventory
     case history
+    case consumption
+    case increase
     case pullPlanRecord(String)
 
     var id: String {
         switch self {
         case .editInventory: return "edit-inventory"
         case .history: return "history"
+        case .consumption: return "consumption"
+        case .increase: return "increase"
         case .pullPlanRecord(let bannerID): return "pull-plan-record-\(bannerID)"
         }
     }

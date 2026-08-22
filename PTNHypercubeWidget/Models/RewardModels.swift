@@ -333,6 +333,7 @@ struct DailyProgressSlot: Identifiable, Hashable {
     let index: Int
     let value: RewardValue
     let claimKeys: [String]
+    let claimedStages: [Bool]
     let count: Int
     let rewardValues: [RewardValue]
     let labels: [String]
@@ -347,6 +348,10 @@ struct DailyProgressSlot: Identifiable, Hashable {
 
     var isClaimed: Bool {
         count > 0
+    }
+
+    func isStageClaimed(at index: Int) -> Bool {
+        claimedStages.indices.contains(index) && claimedStages[index]
     }
 
     var isComplete: Bool {
@@ -542,6 +547,7 @@ struct SecretPassSlot: Identifiable, Hashable {
 enum ProgressModuleKind: String, Codable, Hashable {
     case secretPass
     case miniGame
+    case photoExchange
     case redemptionCode
     case mainlineSignIn
     case anniversarySignIn
