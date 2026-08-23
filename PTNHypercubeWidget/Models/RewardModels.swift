@@ -455,6 +455,24 @@ struct PullPlanBanner: Identifiable, Codable, Hashable {
         selectionKind != .none
     }
 
+    func applyingDateOverride(_ override: PullPlanDateOverride) -> PullPlanBanner {
+        PullPlanBanner(
+            id: id,
+            sourceID: sourceID,
+            title: title,
+            start: override.start,
+            end: override.end,
+            startHour: startHour,
+            startMinute: startMinute,
+            endHour: endHour,
+            endMinute: endMinute,
+            timeZoneIdentifier: timeZoneIdentifier,
+            endTimeZoneIdentifier: endTimeZoneIdentifier,
+            characters: characters,
+            selectionKind: selectionKind
+        )
+    }
+
     var usesPreciseTimeDisplay: Bool {
         timeZoneIdentifier != nil
             || startHour != Calendar.rewardCalendar.bannerRefreshHour

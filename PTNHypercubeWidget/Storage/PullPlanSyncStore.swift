@@ -5,7 +5,7 @@ import Foundation
 final class PullPlanSyncStore: ObservableObject {
     @Published private(set) var revision = 0
 
-    private static let successfulRefreshSlotKey = "ptn.s1nPullPlanSuccessfulRefreshSlot"
+    private static let successfulRefreshSlotKey = "ptn.s1nPullPlanSuccessfulRefreshSlot.v2"
     private let defaults: UserDefaults
     private var lastAttemptAt: Date?
     private var isRefreshing = false
@@ -31,6 +31,20 @@ final class PullPlanSyncStore: ObservableObject {
         Task {
             defer { isRefreshing = false }
             do {
+                let dateOverrides = try await Self.fetchDateOverrides()
+                let oldOverrides = PullPlanDateOverrideCache.load(defaults: defaults)
+                let overrideMap = Dictionary(uniqueKeysWithValues: dateOverrides.map { ($0.sourceID, $0) })
+                let mergedOverrides = oldOverrides.map { overrideMap[$0.sourceID] ?? $0 }
+                    + dateOverrides.filter { dateOverride in
+                        oldOverrides.allSatisfy { oldOverride in
+                            oldOverride.sourceID != dateOverride.sourceID
+                        }
+                    }
+                if mergedOverrides != oldOverrides {
+                    PullPlanDateOverrideCache.save(mergedOverrides, defaults: defaults)
+                    revision += 1
+                }
+
                 let fetched = try await Self.fetchConfirmedBanners(at: now)
                 let existing = PullPlanBannerCache.load(defaults: defaults)
                 let known = RewardSchedule.pullPlanBanners
@@ -51,6 +65,32 @@ final class PullPlanSyncStore: ObservableObject {
             } catch {
                 // Existing local and cached banners remain available; retry later in this slot.
             }
+        }
+    }
+
+    private nonisolated static func fetchDateOverrides() async throws -> [PullPlanDateOverride] {
+        let sourceIDs = RewardSchedule.pullPlanBanners.compactMap(\.sourceID)
+        guard !sourceIDs.isEmpty else { return [] }
+
+        let data = try await S1NSyncSupport.fetch(queryItems: [
+            URLQueryItem(name: "type", value: "eq.banner"),
+            URLQueryItem(name: "id", value: "in.(\(sourceIDs.map(String.init).joined(separator: ",")))"),
+            URLQueryItem(name: "select", value: "id,start,end")
+        ])
+        let records = try JSONDecoder().decode([RemoteDateBanner].self, from: data)
+        let formatter = ISO8601DateFormatter()
+        let calendar = S1NSyncSupport.berlinCalendar
+
+        return records.compactMap { record in
+            guard let start = formatter.date(from: record.start),
+                  let end = formatter.date(from: record.end) else {
+                return nil
+            }
+            return PullPlanDateOverride(
+                sourceID: record.id,
+                start: DayStamp.from(start, calendar: calendar),
+                end: DayStamp.from(end, calendar: calendar)
+            )
         }
     }
 
@@ -153,5 +193,11 @@ final class PullPlanSyncStore: ObservableObject {
         let start: String
         let end: String
         let confirmed: Bool
+    }
+
+    private struct RemoteDateBanner: Decodable {
+        let id: Int
+        let start: String
+        let end: String
     }
 }

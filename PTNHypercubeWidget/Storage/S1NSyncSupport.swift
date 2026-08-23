@@ -47,6 +47,26 @@ enum S1NSyncSupport {
     }
 }
 
+struct PullPlanDateOverride: Codable, Hashable {
+    let sourceID: Int
+    let start: DayStamp
+    let end: DayStamp
+}
+
+enum PullPlanDateOverrideCache {
+    private static let key = "ptn.s1nPullPlanDateOverrides"
+
+    static func load(defaults: UserDefaults = .standard) -> [PullPlanDateOverride] {
+        guard let data = defaults.data(forKey: key) else { return [] }
+        return (try? JSONDecoder().decode([PullPlanDateOverride].self, from: data)) ?? []
+    }
+
+    static func save(_ overrides: [PullPlanDateOverride], defaults: UserDefaults = .standard) {
+        guard let data = try? JSONEncoder().encode(overrides) else { return }
+        defaults.set(data, forKey: key)
+    }
+}
+
 enum PullPlanBannerCache {
     private static let key = "ptn.s1nAppendedPullPlanBanners"
 

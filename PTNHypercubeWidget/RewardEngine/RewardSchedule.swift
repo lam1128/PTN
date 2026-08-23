@@ -577,7 +577,7 @@ enum RewardSchedule {
             id: "routine-rust",
             sourceID: 342,
             title: "复刻池",
-            start: DayStamp(year: 2026, month: 8, day: 20),
+            start: DayStamp(year: 2026, month: 8, day: 27),
             end: DayStamp(year: 2026, month: 9, day: 10),
             characters: ["Rust"]
         ),
@@ -585,7 +585,7 @@ enum RewardSchedule {
             id: "routine-margaret",
             sourceID: 341,
             title: "复刻池",
-            start: DayStamp(year: 2026, month: 8, day: 20),
+            start: DayStamp(year: 2026, month: 8, day: 27),
             end: DayStamp(year: 2026, month: 9, day: 10),
             characters: ["Margaret"]
         ),
@@ -668,15 +668,24 @@ enum RewardSchedule {
     ]
 
     static var pullPlanBanners: [PullPlanBanner] {
-        let bundledIdentities = Set(bundledPullPlanBanners.map(\.syncIdentity))
-        let bundledIDs = Set(bundledPullPlanBanners.map(\.id))
-        let bundledSourceIDs = Set(bundledPullPlanBanners.compactMap(\.sourceID))
+        let overrides = Dictionary(
+            uniqueKeysWithValues: PullPlanDateOverrideCache.load().map { ($0.sourceID, $0) }
+        )
+        let bundledBanners = bundledPullPlanBanners.map { banner in
+            guard let sourceID = banner.sourceID, let override = overrides[sourceID] else {
+                return banner
+            }
+            return banner.applyingDateOverride(override)
+        }
+        let bundledIdentities = Set(bundledBanners.map(\.syncIdentity))
+        let bundledIDs = Set(bundledBanners.map(\.id))
+        let bundledSourceIDs = Set(bundledBanners.compactMap(\.sourceID))
         let appendedBanners = PullPlanBannerCache.load().filter {
             !bundledIDs.contains($0.id)
                 && !bundledSourceIDs.contains($0.sourceID ?? -1)
                 && !bundledIdentities.contains($0.syncIdentity)
         }
-        return bundledPullPlanBanners + appendedBanners
+        return bundledBanners + appendedBanners
     }
 
     static func currentPermanentRewardAnchor(
