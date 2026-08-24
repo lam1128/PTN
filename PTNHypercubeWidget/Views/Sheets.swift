@@ -342,6 +342,7 @@ struct CrystalAdjustmentSheet<ProgressContent: View>: View {
 struct HistorySheetView: View {
     @ObservedObject var store: AppStateStore
     let onClose: () -> Void
+    let onShowStatistics: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -357,6 +358,9 @@ struct HistorySheetView: View {
             } else {
                 HStack {
                     Spacer()
+                    Button("统计", action: onShowStatistics)
+                        .buttonStyle(.bordered)
+
                     Button("撤销最近一条") {
                         store.undoLatestHistoryEntry()
                     }
@@ -406,6 +410,114 @@ struct HistorySheetView: View {
             }
         }
         .padding(18)
+    }
+}
+
+struct HistoryIncomeStatisticsSheet: View {
+    @ObservedObject var store: AppStateStore
+    let onClose: () -> Void
+
+    private var calendar: Calendar { S1NSyncSupport.berlinCalendar }
+
+    private var weeklyCalendar: Calendar {
+        var calendar = self.calendar
+        calendar.firstWeekday = 2 // Monday
+        calendar.minimumDaysInFirstWeek = 1
+        return calendar
+    }
+
+    private var monthInterval: DateInterval? {
+        calendar.dateInterval(of: .month, for: Date())
+    }
+
+    private var weeklyIntervals: [DateInterval] {
+        guard let monthInterval else { return [] }
+
+        var result: [DateInterval] = []
+        var cursor = monthInterval.start
+        while cursor < monthInterval.end {
+            guard let week = weeklyCalendar.dateInterval(of: .weekOfYear, for: cursor) else { break }
+            if week.start < monthInterval.end && week.end > monthInterval.start {
+                result.append(week)
+            }
+            cursor = week.end
+        }
+        return result
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            panelHeader("收入统计", onClose: onClose)
+
+            statisticsRow(
+                title: "本月总结",
+                date: monthDetail,
+                amount: store.incomeCrystalEquivalent(in: monthInterval ?? DateInterval(start: Date(), duration: 0))
+            )
+
+            ScrollView(.vertical, showsIndicators: true) {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(weeklyIntervals.enumerated()), id: \.offset) { _, interval in
+                        statisticsRow(
+                            title: "本周总结",
+                            date: weekDetail(interval),
+                            amount: store.incomeCrystalEquivalent(in: interval)
+                        )
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(18)
+    }
+
+    private func statisticsRow(
+        title: String,
+        date: String,
+        amount: Int
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .font(.headline)
+
+            Text(date)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Text("\(amount >= 0 ? "+" : "")\(amount)晶")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(WidgetPalette.accent)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.18))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.34), lineWidth: 1)
+        }
+    }
+
+    private var monthDetail: String {
+        guard let interval = monthInterval else { return "自然月" }
+        let formatter = DateFormatter()
+        formatter.calendar = weeklyCalendar
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy年M月"
+        return formatter.string(from: interval.start)
+    }
+
+    private func weekDetail(_ interval: DateInterval) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "MM月dd日"
+        let end = interval.end.addingTimeInterval(-1)
+        return "\(formatter.string(from: interval.start)) - \(formatter.string(from: end))"
     }
 }
 

@@ -212,6 +212,33 @@ final class AppStateStore: ObservableObject {
         return total.crystalEquivalentDescription(withPlusSign: true)
     }
 
+    func incomeCrystalEquivalent(
+        in component: Calendar.Component,
+        now: Date = Date()
+    ) -> Int {
+        let calendar = S1NSyncSupport.berlinCalendar
+        guard let interval = calendar.dateInterval(of: component, for: now) else {
+            return 0
+        }
+
+        return incomeCrystalEquivalent(in: interval)
+    }
+
+    func incomeCrystalEquivalent(in interval: DateInterval) -> Int {
+        incomeEntries(in: interval).reduce(0) { total, entry in
+            total + entry.value
+        }
+    }
+
+    private func incomeEntries(in interval: DateInterval) -> [String: Int] {
+        history.reduce(into: [:]) { totals, entry in
+            guard interval.contains(entry.timestamp) else { return }
+            let amount = entry.value.crystals + entry.value.blueTickets * 180
+            totals[entry.source, default: 0] += amount
+        }
+        .filter { $0.value != 0 }
+    }
+
     func pullPlanBannerProgress(for bannerID: String) -> PullPlanBannerProgress {
         PullPlanBannerProgress(rawValue: pullPlanBannerProgressRawValues[bannerID] ?? 0) ?? .none
     }

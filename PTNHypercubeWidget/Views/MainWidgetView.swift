@@ -1022,8 +1022,17 @@ struct MainWidgetView: View {
             .frame(width: 310)
         case .history:
             WidgetPopupContainer {
-                HistorySheetView(store: store) {
-                    activeSheet = nil
+                HistorySheetView(
+                    store: store,
+                    onClose: { activeSheet = nil },
+                    onShowStatistics: { activeSheet = .historyStatistics }
+                )
+            }
+            .frame(width: 310, height: 270)
+        case .historyStatistics:
+            WidgetPopupContainer {
+                HistoryIncomeStatisticsSheet(store: store) {
+                    activeSheet = .history
                 }
             }
             .frame(width: 310, height: 350)
@@ -2177,6 +2186,7 @@ private enum PrimarySection: String {
 private enum ActiveSheet: Identifiable, Equatable {
     case editInventory
     case history
+    case historyStatistics
     case consumption
     case increase
     case pullPlanRecord(String)
@@ -2185,6 +2195,7 @@ private enum ActiveSheet: Identifiable, Equatable {
         switch self {
         case .editInventory: return "edit-inventory"
         case .history: return "history"
+        case .historyStatistics: return "history-statistics"
         case .consumption: return "consumption"
         case .increase: return "increase"
         case .pullPlanRecord(let bannerID): return "pull-plan-record-\(bannerID)"

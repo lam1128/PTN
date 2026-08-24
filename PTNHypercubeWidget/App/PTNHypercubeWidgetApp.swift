@@ -112,6 +112,7 @@ final class WidgetAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
         menu.autoenablesItems = false
         menu.addItem(NSMenuItem(title: "显示小组件", action: #selector(togglePanelVisibilityFromMenu), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "半透明小组件", action: #selector(toggleTranslucencyFromMenu), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "复位位置", action: #selector(resetPanelPositionFromMenu), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "退出", action: #selector(quitApp), keyEquivalent: "q"))
 
@@ -164,6 +165,7 @@ final class WidgetAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
         menu.item(at: 0)?.target = self
         menu.item(at: 1)?.target = self
         menu.item(at: 2)?.target = self
+        menu.item(at: 4)?.target = self
         menu.item(at: 1)?.state = store.usesExtraTranslucentBackground ? .on : .off
     }
 
@@ -175,6 +177,19 @@ final class WidgetAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
     @objc
     private func toggleTranslucencyFromMenu() {
         store.setUsesExtraTranslucentBackground(!store.usesExtraTranslucentBackground)
+    }
+
+    @objc
+    private func resetPanelPositionFromMenu() {
+        if panel == nil {
+            showPanel()
+        }
+
+        guard let panel else { return }
+        let origin = resetOrigin(for: panel.frame.size)
+        panel.setFrame(NSRect(origin: origin, size: panel.frame.size), display: true)
+        saveOrigin(origin)
+        panel.orderFrontRegardless()
     }
 
     @objc
@@ -191,17 +206,38 @@ final class WidgetAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate
             return
         }
 
-        guard let screen = NSScreen.main else { return }
+        let origin = defaultOrigin(for: size)
+        panel.setFrame(NSRect(origin: origin, size: size), display: true)
+    }
+
+    private func defaultOrigin(for size: NSSize) -> NSPoint {
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else {
+            return .zero
+        }
 
         let visibleFrame = screen.visibleFrame
         let insetX: CGFloat = 24
         let insetY: CGFloat = 28
-        let origin = NSPoint(
+        return NSPoint(
             x: visibleFrame.maxX - size.width - insetX,
             y: visibleFrame.maxY - size.height - insetY
         )
+    }
 
-        panel.setFrame(NSRect(origin: origin, size: size), display: true)
+    private func resetOrigin(for size: NSSize) -> NSPoint {
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else {
+            return .zero
+        }
+
+        let visibleFrame = screen.visibleFrame
+        let topInset: CGFloat = 16
+        let horizontalRatio: CGFloat = 0.67
+        let availableWidth = max(0, visibleFrame.width - size.width)
+
+        return NSPoint(
+            x: visibleFrame.minX + availableWidth * horizontalRatio,
+            y: visibleFrame.maxY - size.height - topInset
+        )
     }
 
     func windowDidMove(_ notification: Notification) {
