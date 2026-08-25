@@ -1,5 +1,9 @@
-import AppKit
 import SwiftUI
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 enum WidgetPalette {
     static let titlePrimary = Color(red: 0.34, green: 0.15, blue: 0.22)
@@ -137,6 +141,7 @@ struct MainWidgetView: View {
     @ObservedObject var store: AppStateStore
     @StateObject private var giftCodeStore = GiftCodeStore()
     @StateObject private var pullPlanSyncStore = PullPlanSyncStore()
+    @StateObject private var cloudSync = CloudKitStateSync()
 
     @State private var activeSheet: ActiveSheet?
     @State private var selectedPrimarySection: PrimarySection = .currentPeriod
@@ -266,7 +271,9 @@ struct MainWidgetView: View {
                         .onTapGesture {
                             isUpListExpanded = false
                             isGiftCodeListExpanded = false
+#if os(macOS)
                             NSApp.keyWindow?.makeFirstResponder(nil)
+#endif
                         }
                         .zIndex(WidgetPopupLayer.dismissArea)
                 }
@@ -365,11 +372,16 @@ struct MainWidgetView: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
             .background(Color.clear)
         }
+#if os(macOS)
         .frame(width: 340, height: 430)
+#else
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+#endif
         .onAppear {
             store.refreshRewards()
             giftCodeStore.refreshIfNeeded()
             pullPlanSyncStore.refreshIfNeeded()
+            cloudSync.start(store: store)
         }
         .onReceive(refreshTimer) { now in
             store.refreshRewards(now: now)
@@ -1959,6 +1971,7 @@ private struct PullPlanPityField: View {
                     .foregroundStyle(WidgetPalette.mutedText.opacity(0.78))
                 }
 
+#if os(macOS)
                 InlineNumericTextField(
                     text: editingText,
                     isFocused: $isFocused,
@@ -1971,6 +1984,13 @@ private struct PullPlanPityField: View {
                     font: NSFont.systemFont(ofSize: 11, weight: .semibold),
                     onCommit: commitText
                 )
+#else
+                TextField("0", text: editingText)
+                    .keyboardType(.numberPad)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(WidgetPalette.accent)
+                    .onSubmit(commitText)
+#endif
                 .padding(.horizontal, 4)
             }
             .frame(width: 38, height: 26)
@@ -2131,8 +2151,12 @@ private struct GiftCodeListPopup: View {
     }
 
     private func copy(_ giftCode: GiftCode) {
+#if os(macOS)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(giftCode.code, forType: .string)
+#else
+        UIPasteboard.general.string = giftCode.code
+#endif
         copiedCodeID = giftCode.id
 
         Task {

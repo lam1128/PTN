@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import CoreGraphics
 import SwiftUI
@@ -303,3 +304,4 @@ struct PTNHypercubeWidgetApp: App {
         }
     }
 }
+#endif

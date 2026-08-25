@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$ROOT_DIR/dist/PTNHypercubeWidget.app"
 EXECUTABLE="$APP_DIR/Contents/MacOS/PTNHypercubeWidget"
 MODULE_CACHE="/private/tmp/swift-module-cache"
+ENTITLEMENTS="$ROOT_DIR/PTNHypercubeWidget/App/PTNHypercubeWidgetMac.entitlements"
 
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources" "$MODULE_CACHE"
 SWIFT_SOURCES=("$ROOT_DIR"/PTNHypercubeWidget/**/*.swift(N))
@@ -39,7 +40,7 @@ PLIST
 plutil -lint "$APP_DIR/Contents/Info.plist" >/dev/null
 
 if command -v codesign >/dev/null 2>&1; then
-  codesign --force --sign - "$APP_DIR" >/dev/null 2>&1 || true
+  codesign --force --sign "${CODESIGN_IDENTITY:--}" --entitlements "$ENTITLEMENTS" "$APP_DIR" >/dev/null 2>&1 || true
 fi
 
 pkill -x PTNHypercubeWidget >/dev/null 2>&1 || true

@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import SwiftUI
 
@@ -237,3 +238,4 @@ final class DragHandleNSView: NSView {
         window?.performDrag(with: event)
     }
 }
+#endif

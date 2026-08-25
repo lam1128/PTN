@@ -7,6 +7,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="PTNHypercubeWidget"
 BUNDLE_ID="com.openai.PTNHypercubeWidget"
 APP_BUNDLE="${2:-$ROOT_DIR/dist/$APP_NAME.app}"
+ENTITLEMENTS="$ROOT_DIR/PTNHypercubeWidget/App/PTNHypercubeWidgetMac.entitlements"
 
 case "$CONFIGURATION" in
     debug|release) ;;
@@ -53,7 +54,7 @@ PLIST
 plutil -lint "$APP_BUNDLE/Contents/Info.plist" >/dev/null
 
 if command -v codesign >/dev/null 2>&1; then
-    codesign --force --deep --sign - --identifier "$BUNDLE_ID" "$APP_BUNDLE" >/dev/null 2>&1 || true
+    codesign --force --deep --sign "${CODESIGN_IDENTITY:--}" --identifier "$BUNDLE_ID" --entitlements "$ENTITLEMENTS" "$APP_BUNDLE" >/dev/null 2>&1 || true
 fi
 
 echo "$APP_BUNDLE"

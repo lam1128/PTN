@@ -13,6 +13,9 @@
 ## 编译与启动
 
 - [ ] `./build-standalone-app.sh` 编译成功。
+- [ ] Xcode 中可选择 `PTNHypercubeWidgetiOS` target，并在 iPhone 模拟器或真机编译。
+- [ ] iOS target 已启用 `iCloud.com.openai.PTNHypercubeWidget` CloudKit 容器。
+- [ ] Mac 与 iPhone 登录同一 Apple ID 后，库存、领取记录、历史和抽卡规划可互相同步。
 - [ ] `dist/PTNHypercubeWidget.app` 成功打开。
 - [ ] 应用启动后没有崩溃、白屏或空窗口。
 - [ ] 状态栏 M 图标正常显示，菜单可以显示、隐藏、切换透明度和退出。

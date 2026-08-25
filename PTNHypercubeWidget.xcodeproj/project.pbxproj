@@ -15,6 +15,12 @@
 		A00100010000000100000007 /* MainWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000007 /* MainWidgetView.swift */; };
 		A00100010000000100000008 /* Sheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000008 /* Sheets.swift */; };
 		A00100010000000100000009 /* WidgetSupportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020001000000010000000A /* WidgetSupportViews.swift */; };
+		A0010001000000010000000B /* GiftCodeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020001000000010000000B /* GiftCodeStore.swift */; };
+		A0010001000000010000000C /* PullPlanSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020001000000010000000C /* PullPlanSyncStore.swift */; };
+		A0010001000000010000000D /* S1NSyncSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020001000000010000000D /* S1NSyncSupport.swift */; };
+		A0010001000000010000000E /* CloudKitStateSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020001000000010000000E /* CloudKitStateSync.swift */; };
+		A0010001000000010000000F /* PTNHypercubeWidgetiOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020001000000010000000F /* PTNHypercubeWidgetiOSApp.swift */; };
+		A00100010000000100000010 /* WidgetSupportViews_iOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000010 /* WidgetSupportViews_iOS.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,10 +33,26 @@
 		A00200010000000100000008 /* Sheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sheets.swift; sourceTree = "<group>"; };
 		A00200010000000100000009 /* PTNHypercubeWidget.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PTNHypercubeWidget.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0020001000000010000000A /* WidgetSupportViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSupportViews.swift; sourceTree = "<group>"; };
+		A0020001000000010000000B /* GiftCodeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GiftCodeStore.swift; sourceTree = "<group>"; };
+		A0020001000000010000000C /* PullPlanSyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PullPlanSyncStore.swift; sourceTree = "<group>"; };
+		A0020001000000010000000D /* S1NSyncSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S1NSyncSupport.swift; sourceTree = "<group>"; };
+		A0020001000000010000000E /* CloudKitStateSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitStateSync.swift; sourceTree = "<group>"; };
+		A0020001000000010000000F /* PTNHypercubeWidgetiOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTNHypercubeWidgetiOSApp.swift; sourceTree = "<group>"; };
+		A00200010000000100000010 /* WidgetSupportViews_iOS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSupportViews_iOS.swift; sourceTree = "<group>"; };
+		A00200010000000100000011 /* PTNHypercubeWidgetMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PTNHypercubeWidgetMac.entitlements; sourceTree = "<group>"; };
+		A00200010000000100000012 /* PTNHypercubeWidgetiOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PTNHypercubeWidgetiOS.entitlements; sourceTree = "<group>"; };
+		A00200010000000100000013 /* PTNHypercubeWidgetiOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PTNHypercubeWidgetiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A00300010000000100000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A00300010000000100000002 /* iOS Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -64,6 +86,9 @@
 			isa = PBXGroup;
 			children = (
 				A00200010000000100000001 /* PTNHypercubeWidgetApp.swift */,
+				A0020001000000010000000F /* PTNHypercubeWidgetiOSApp.swift */,
+				A00200010000000100000011 /* PTNHypercubeWidgetMac.entitlements */,
+				A00200010000000100000012 /* PTNHypercubeWidgetiOS.entitlements */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -89,6 +114,10 @@
 			isa = PBXGroup;
 			children = (
 				A00200010000000100000006 /* AppStateStore.swift */,
+				A0020001000000010000000B /* GiftCodeStore.swift */,
+				A0020001000000010000000C /* PullPlanSyncStore.swift */,
+				A0020001000000010000000D /* S1NSyncSupport.swift */,
+				A0020001000000010000000E /* CloudKitStateSync.swift */,
 			);
 			path = Storage;
 			sourceTree = "<group>";
@@ -97,6 +126,7 @@
 			isa = PBXGroup;
 			children = (
 				A00200010000000100000009 /* PTNHypercubeWidget.app */,
+				A00200010000000100000013 /* PTNHypercubeWidgetiOS.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -106,6 +136,7 @@
 			children = (
 				A00200010000000100000007 /* MainWidgetView.swift */,
 				A0020001000000010000000A /* WidgetSupportViews.swift */,
+				A00200010000000100000010 /* WidgetSupportViews_iOS.swift */,
 				A00200010000000100000008 /* Sheets.swift */,
 			);
 			path = Views;
@@ -131,6 +162,23 @@
 			productReference = A00200010000000100000009 /* PTNHypercubeWidget.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A00500010000000100000002 /* PTNHypercubeWidgetiOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A00800010000000100000004 /* Build configuration list for PBXNativeTarget "PTNHypercubeWidgetiOS" */;
+			buildPhases = (
+				A00600010000000100000002 /* iOS Sources */,
+				A00300010000000100000002 /* iOS Frameworks */,
+				A00700010000000100000002 /* iOS Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PTNHypercubeWidgetiOS;
+			productName = PTNHypercubeWidgetiOS;
+			productReference = A00200010000000100000013 /* PTNHypercubeWidgetiOS.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -143,6 +191,19 @@
 				TargetAttributes = {
 					A00500010000000100000001 = {
 						CreatedOnToolsVersion = 16.3;
+						SystemCapabilities = {
+							com.apple.iCloud = {
+								enabled = 1;
+							};
+						};
+					};
+					A00500010000000100000002 = {
+						CreatedOnToolsVersion = 16.3;
+						SystemCapabilities = {
+							com.apple.iCloud = {
+								enabled = 1;
+							};
+						};
 					};
 				};
 			};
@@ -160,12 +221,20 @@
 			projectRoot = "";
 			targets = (
 				A00500010000000100000001 /* PTNHypercubeWidget */,
+				A00500010000000100000002 /* PTNHypercubeWidgetiOS */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A00700010000000100000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A00700010000000100000002 /* iOS Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -187,6 +256,29 @@
 				A00100010000000100000005 /* RewardEngine.swift in Sources */,
 				A00100010000000100000006 /* AppStateStore.swift in Sources */,
 				A00100010000000100000001 /* PTNHypercubeWidgetApp.swift in Sources */,
+				A0010001000000010000000B /* GiftCodeStore.swift in Sources */,
+				A0010001000000010000000C /* PullPlanSyncStore.swift in Sources */,
+				A0010001000000010000000D /* S1NSyncSupport.swift in Sources */,
+				A0010001000000010000000E /* CloudKitStateSync.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A00600010000000100000002 /* iOS Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0010001000000010000000F /* PTNHypercubeWidgetiOSApp.swift in Sources */,
+				A00100010000000100000003 /* RewardModels.swift in Sources */,
+				A00100010000000100000004 /* RewardSchedule.swift in Sources */,
+				A00100010000000100000005 /* RewardEngine.swift in Sources */,
+				A00100010000000100000006 /* AppStateStore.swift in Sources */,
+				A0010001000000010000000E /* CloudKitStateSync.swift in Sources */,
+				A0010001000000010000000B /* GiftCodeStore.swift in Sources */,
+				A0010001000000010000000C /* PullPlanSyncStore.swift in Sources */,
+				A0010001000000010000000D /* S1NSyncSupport.swift in Sources */,
+				A00100010000000100000007 /* MainWidgetView.swift in Sources */,
+				A00100010000000100000008 /* Sheets.swift in Sources */,
+				A00100010000000100000010 /* WidgetSupportViews_iOS.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -251,6 +343,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_ENTITLEMENTS = PTNHypercubeWidget/App/PTNHypercubeWidgetMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -279,6 +372,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_ENTITLEMENTS = PTNHypercubeWidget/App/PTNHypercubeWidgetMac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -303,6 +397,46 @@
 			};
 			name = Release;
 		};
+		A00A00010000000100000005 /* iOS Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PTNHypercubeWidget/App/PTNHypercubeWidgetiOS.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "异方晶";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.openai.PTNHypercubeWidget.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A00A00010000000100000006 /* iOS Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PTNHypercubeWidget/App/PTNHypercubeWidgetiOS.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "异方晶";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.openai.PTNHypercubeWidget.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -320,6 +454,15 @@
 			buildConfigurations = (
 				A00A00010000000100000003 /* Debug */,
 				A00A00010000000100000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A00800010000000100000004 /* Build configuration list for PBXNativeTarget "PTNHypercubeWidgetiOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A00A00010000000100000005 /* iOS Debug */,
+				A00A00010000000100000006 /* iOS Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

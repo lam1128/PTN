@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 @MainActor
@@ -53,6 +54,7 @@ final class AppStateStore: ObservableObject {
         static let hasPremiumSecretPass = "ptn.hasPremiumSecretPass"
         static let automaticStorageLastUpdateAt = "ptn.automaticStorageLastUpdateAt"
         static let automaticStorageCalibrationVersion = "ptn.automaticStorageCalibrationVersion"
+        static let cloudSyncCompleted = "ptn.cloudSyncCompleted"
     }
 
     init(
@@ -165,6 +167,91 @@ final class AppStateStore: ObservableObject {
         bootstrapInitialStateIfNeeded()
         calibrateAutomaticStorageIfNeeded()
         refreshRewards()
+    }
+
+    var hasMeaningfulLocalState: Bool {
+        totalCrystals != 0
+            || totalBlueTickets != 0
+            || totalRedTickets != 0
+            || !claimedRewardKeys.isEmpty
+            || !history.isEmpty
+            || !pullPlanBannerProgressRawValues.isEmpty
+            || !selectedPullPlanUpChoices.isEmpty
+            || !selectedPullPlanLockChoices.isEmpty
+            || !pullPlanPityValues.isEmpty
+            || !pullPlanTicketRecords.isEmpty
+            || hasPremiumSecretPass
+    }
+
+    var hasCompletedCloudSync: Bool {
+        defaults.bool(forKey: StorageKey.cloudSyncCompleted)
+    }
+
+    func markCloudSyncCompleted() {
+        defaults.set(true, forKey: StorageKey.cloudSyncCompleted)
+    }
+
+    var cloudSnapshotData: Data? {
+        let snapshot = AppStateCloudSnapshot(
+            totalCrystals: totalCrystals,
+            totalBlueTickets: totalBlueTickets,
+            totalRedTickets: totalRedTickets,
+            claimedRewardKeys: Array(claimedRewardKeys).sorted(),
+            history: history,
+            manualCycleVersions: manualCycleVersions,
+            dailyCycleVersions: dailyCycleVersions,
+            pullPlanBannerProgressRawValues: pullPlanBannerProgressRawValues,
+            selectedPullPlanUpChoices: selectedPullPlanUpChoices,
+            selectedPullPlanLockChoices: selectedPullPlanLockChoices,
+            pullPlanPityValues: pullPlanPityValues,
+            pullPlanTicketRecords: pullPlanTicketRecords,
+            hasPremiumSecretPass: hasPremiumSecretPass,
+            usesExtraTranslucentBackground: usesExtraTranslucentBackground,
+            automaticStorageLastUpdateAt: defaults.object(forKey: StorageKey.automaticStorageLastUpdateAt) as? Date,
+            automaticStorageCalibrationVersion: defaults.integer(forKey: StorageKey.automaticStorageCalibrationVersion)
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return try? encoder.encode(snapshot)
+    }
+
+    @discardableResult
+    func applyCloudSnapshotData(_ data: Data) -> Bool {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let snapshot = try? decoder.decode(AppStateCloudSnapshot.self, from: data) else {
+            return false
+        }
+
+        totalCrystals = max(0, snapshot.totalCrystals)
+        totalBlueTickets = max(0, snapshot.totalBlueTickets)
+        totalRedTickets = max(0, snapshot.totalRedTickets)
+        claimedRewardKeys = Set(snapshot.claimedRewardKeys)
+        history = snapshot.history
+        manualCycleVersions = snapshot.manualCycleVersions
+        dailyCycleVersions = snapshot.dailyCycleVersions
+        pullPlanBannerProgressRawValues = snapshot.pullPlanBannerProgressRawValues
+        selectedPullPlanUpChoices = snapshot.selectedPullPlanUpChoices
+        selectedPullPlanLockChoices = snapshot.selectedPullPlanLockChoices
+        pullPlanPityValues = snapshot.pullPlanPityValues
+        pullPlanTicketRecords = snapshot.pullPlanTicketRecords
+        hasPremiumSecretPass = snapshot.hasPremiumSecretPass
+        usesExtraTranslucentBackground = snapshot.usesExtraTranslucentBackground
+
+        if let automaticStorageLastUpdateAt = snapshot.automaticStorageLastUpdateAt {
+            defaults.set(automaticStorageLastUpdateAt, forKey: StorageKey.automaticStorageLastUpdateAt)
+        } else {
+            defaults.removeObject(forKey: StorageKey.automaticStorageLastUpdateAt)
+        }
+        defaults.set(
+            snapshot.automaticStorageCalibrationVersion,
+            forKey: StorageKey.automaticStorageCalibrationVersion
+        )
+
+        persist(notify: false)
+        refreshRewards()
+        return true
     }
 
     var totalDrawCount: Double {
@@ -1054,7 +1141,7 @@ final class AppStateStore: ObservableObject {
         totalRedTickets = max(0, totalRedTickets - value.redTickets)
     }
 
-    private func persist() {
+    private func persist(notify: Bool = true) {
         defaults.set(totalCrystals, forKey: StorageKey.totalCrystals)
         defaults.set(totalBlueTickets, forKey: StorageKey.totalBlueTickets)
         defaults.set(totalRedTickets, forKey: StorageKey.totalRedTickets)
@@ -1075,6 +1162,10 @@ final class AppStateStore: ObservableObject {
         }
         if let data = try? encoder.encode(pullPlanTicketRecords) {
             defaults.set(data, forKey: StorageKey.pullPlanTicketRecords)
+        }
+
+        if notify {
+            NotificationCenter.default.post(name: .appStateDidChange, object: self)
         }
     }
 
