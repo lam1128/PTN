@@ -450,7 +450,7 @@ struct HistoryIncomeStatisticsSheet: View {
             panelHeader("收入统计", onClose: onClose)
 
             statisticsRow(
-                title: "本月总结",
+                title: "月总结",
                 date: monthDetail,
                 amount: store.incomeCrystalEquivalent(in: monthInterval ?? DateInterval(start: Date(), duration: 0))
             )
@@ -459,7 +459,7 @@ struct HistoryIncomeStatisticsSheet: View {
                 LazyVStack(alignment: .leading, spacing: 10) {
                     ForEach(Array(weeklyIntervals.enumerated()), id: \.offset) { _, interval in
                         statisticsRow(
-                            title: "本周总结",
+                            title: "周总结",
                             date: weekDetail(interval),
                             amount: store.incomeCrystalEquivalent(in: interval)
                         )

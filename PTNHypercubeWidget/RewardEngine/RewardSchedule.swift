@@ -46,6 +46,7 @@ struct DailyProgressDefinition: Identifiable, Hashable {
     let slots: [DailyProgressSlotDefinition]
     let display: DailyProgressDisplay
     let showsCycleAdvanceButton: Bool
+    let resetsDaily: Bool
     let rowCapacity: Int?
 
     init(
@@ -54,6 +55,7 @@ struct DailyProgressDefinition: Identifiable, Hashable {
         slots: [DailyProgressSlotDefinition],
         display: DailyProgressDisplay,
         showsCycleAdvanceButton: Bool = false,
+        resetsDaily: Bool = true,
         rowCapacity: Int? = nil
     ) {
         self.id = id
@@ -61,6 +63,7 @@ struct DailyProgressDefinition: Identifiable, Hashable {
         self.slots = slots
         self.display = display
         self.showsCycleAdvanceButton = showsCycleAdvanceButton
+        self.resetsDaily = resetsDaily
         self.rowCapacity = rowCapacity
     }
 }
@@ -159,7 +162,7 @@ enum RewardSchedule {
         DailyProgressDefinition(
             id: dailyDispatchID,
             title: "派遣",
-            slots: [15, 15, 40].enumerated().map { index, value in
+            slots: [15, 20, 40].enumerated().map { index, value in
                 DailyProgressSlotDefinition(
                     id: "dispatch-\(index + 1)",
                     value: RewardValue(crystals: value),
@@ -213,7 +216,8 @@ enum RewardSchedule {
                 )
             ],
             display: .count,
-            showsCycleAdvanceButton: true
+            showsCycleAdvanceButton: true,
+            resetsDaily: false
         ),
         DailyProgressDefinition(
             id: "daily-obedience",
@@ -275,7 +279,8 @@ enum RewardSchedule {
                 )
             ],
             display: .value,
-            showsCycleAdvanceButton: true
+            showsCycleAdvanceButton: true,
+            resetsDaily: false
         )
     ]
 

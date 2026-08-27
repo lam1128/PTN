@@ -235,7 +235,7 @@ struct RewardEngine {
         var progresses = RewardSchedule.dailyProgressDefinitions.map {
             makeProgress(
                 definition: $0,
-                cycleKey: day.key,
+                cycleKey: $0.resetsDaily ? day.key : $0.id,
                 claimedKeys: claimedKeys,
                 dailyCycleVersions: dailyCycleVersions
             )

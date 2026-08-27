@@ -1211,31 +1211,34 @@ private struct ManualUnknownRewardRowView: View {
     var body: some View {
         HStack(spacing: 10) {
             Button(action: onClaim) {
-                RewardCircle(isFilled: reward.isClaimed)
-                    .frame(width: 24, height: 24)
+                HStack(spacing: 10) {
+                    RewardCircle(isFilled: reward.isClaimed)
+                        .frame(width: 24, height: 24)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Text(reward.title)
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(reward.isClaimed ? WidgetPalette.claimed : WidgetPalette.titlePrimary)
+
+                            Spacer(minLength: 0)
+
+                            if let remainingText = reward.remainingText {
+                                Text(remainingText)
+                                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                                    .foregroundStyle(reward.isClaimed ? WidgetPalette.claimed : WidgetPalette.accentSoft)
+                            }
+
+                            Text(reward.value.inlineDescription(withPlusSign: true))
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundStyle(reward.isClaimed ? WidgetPalette.claimed : WidgetPalette.accent)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(reward.title)
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundStyle(reward.isClaimed ? WidgetPalette.claimed : WidgetPalette.titlePrimary)
-
-                    Spacer(minLength: 0)
-
-                    if let remainingText = reward.remainingText {
-                        Text(remainingText)
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .foregroundStyle(reward.isClaimed ? WidgetPalette.claimed : WidgetPalette.accentSoft)
-                    }
-
-                    Text(reward.value.inlineDescription(withPlusSign: true))
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundStyle(reward.isClaimed ? WidgetPalette.claimed : WidgetPalette.accent)
-                }
-
-            }
 
             if reward.showsAdvanceCycleButton {
                 ManualResetButton(action: onAdvanceCycle)

@@ -1011,9 +1011,7 @@ final class AppStateStore: ObservableObject {
         claimedRewardKeys.remove(claimKey)
         revert(value: value)
 
-        if let index = history.firstIndex(where: { $0.claimKey == claimKey }) {
-            history.remove(at: index)
-        }
+        history.removeAll { $0.claimKey == claimKey }
 
         persist()
         refreshRewards(now: now)
