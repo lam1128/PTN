@@ -394,6 +394,7 @@ struct DailyProgress: Identifiable, Hashable {
     let display: DailyProgressDisplay
     let showsCycleAdvanceButton: Bool
     let rowCapacity: Int?
+    let remainingText: String?
 
     var isCompleted: Bool {
         display != .count && slots.allSatisfy(\.isComplete)

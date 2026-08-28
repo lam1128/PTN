@@ -327,6 +327,57 @@ enum RewardSchedule {
         display: .value
     )
 
+    static let activityRerunDefinition = DailyProgressDefinition(
+        id: "activity-rerun",
+        title: "活动·复刻",
+        slots: [
+            DailyProgressSlotDefinition(
+                id: "crystals",
+                value: RewardValue(crystals: 600),
+                labels: ["600"],
+                historySources: ["活动·复刻·600异方晶"],
+                maxCount: 1,
+                tint: .neutral,
+                completionBonus: .zero,
+                shape: .capsule
+            ),
+            DailyProgressSlotDefinition(
+                id: "blue-ticket",
+                value: RewardValue(blueTickets: 1),
+                labels: ["1"],
+                historySources: ["活动·复刻·1蓝票"],
+                maxCount: 1,
+                tint: .neutral,
+                completionBonus: .zero,
+                showsCheckmark: true,
+                shape: .circle
+            ),
+            DailyProgressSlotDefinition(
+                id: "blue-ticket-2",
+                value: RewardValue(blueTickets: 1),
+                historySources: ["活动·复刻·1蓝票"],
+                maxCount: 1,
+                tint: .neutral,
+                completionBonus: .zero,
+                showsCheckmark: true,
+                shape: .circle
+            ),
+            DailyProgressSlotDefinition(
+                id: "blue-ticket-3",
+                value: RewardValue(blueTickets: 1),
+                historySources: ["活动·复刻·1蓝票"],
+                maxCount: 1,
+                tint: .neutral,
+                completionBonus: .zero,
+                showsCheckmark: true,
+                shape: .circle
+            )
+        ],
+        display: .value,
+        showsCycleAdvanceButton: false,
+        resetsDaily: false
+    )
+
     static let permanentProgressDefinitions: [DailyProgressDefinition] = [
         makePermanentProgressDefinition(
             id: "n9",
@@ -708,6 +759,20 @@ enum RewardSchedule {
                 if lhsStart != rhsStart { return lhsStart < rhsStart }
                 return lhs.id < rhs.id
             }
+    }
+
+    // 同一开始日期的复刻池共用一个奖励周期，下一组复刻池开始时自动换周期。
+    static func activityRerunCycleKey(
+        at date: Date,
+        calendar: Calendar = .rewardCalendar
+    ) -> String {
+        pullPlanBanners
+            .filter { $0.title == "复刻池" && $0.startsAt(in: calendar) <= date }
+            .max { lhs, rhs in
+                if lhs.start != rhs.start { return lhs.start < rhs.start }
+                return lhs.id < rhs.id
+            }?
+            .start.key ?? "activity-rerun"
     }
 
     // 抽卡规划的“垫抽数”按实际卡池体系共用：

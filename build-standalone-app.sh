@@ -12,6 +12,7 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources" "$MODULE_CACHE"
 SWIFT_SOURCES=("$ROOT_DIR"/PTNHypercubeWidget/**/*.swift(N))
 
 swiftc \
+  -D STANDALONE_BUILD \
   -module-cache-path "$MODULE_CACHE" \
   "${SWIFT_SOURCES[@]}" \
   -o "$EXECUTABLE"
@@ -39,8 +40,18 @@ PLIST
 
 plutil -lint "$APP_DIR/Contents/Info.plist" >/dev/null
 
+# Remove inherited download/provenance flags before launching the local build.
+if command -v xattr >/dev/null 2>&1; then
+  xattr -cr "$APP_DIR" 2>/dev/null || true
+fi
+
 if command -v codesign >/dev/null 2>&1; then
-  codesign --force --sign "${CODESIGN_IDENTITY:--}" --entitlements "$ENTITLEMENTS" "$APP_DIR" >/dev/null 2>&1 || true
+  if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
+    codesign --force --sign "$CODESIGN_IDENTITY" --entitlements "$ENTITLEMENTS" "$APP_DIR" >/dev/null 2>&1 || true
+  else
+    # Ad-hoc standalone builds cannot carry CloudKit entitlements without a team.
+    codesign --force --sign - "$APP_DIR" >/dev/null 2>&1 || true
+  fi
 fi
 
 pkill -x PTNHypercubeWidget >/dev/null 2>&1 || true

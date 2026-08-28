@@ -6,6 +6,7 @@ struct RewardSnapshot {
     let manualUnknownRewards: [ManualUnknownReward]
     let dailyExtraRewards: [RewardItem]
     let dailyProgresses: [DailyProgress]
+    let activityRerunProgress: DailyProgress
     let weeklyInspectionProgress: DailyProgress
     let permanentProgresses: [DailyProgress]
     let secretPassProgress: SecretPassProgress
@@ -56,6 +57,16 @@ struct RewardEngine {
                 for: currentDate,
                 claimedKeys: claimedKeys,
                 dailyCycleVersions: dailyCycleVersions
+            ),
+            activityRerunProgress: makeProgress(
+                definition: RewardSchedule.activityRerunDefinition,
+                cycleKey: RewardSchedule.activityRerunCycleKey(
+                    at: currentDate,
+                    calendar: calendar
+                ),
+                claimedKeys: claimedKeys,
+                dailyCycleVersions: dailyCycleVersions,
+                remainingText: activityRerunRemainingText(now: currentDate)
             ),
             weeklyInspectionProgress: makeProgress(
                 definition: RewardSchedule.weeklyInspectionProgressDefinition,
@@ -292,7 +303,8 @@ struct RewardEngine {
         cycleKey: String,
         claimedKeys: Set<String>,
         dailyCycleVersions: [String: Int],
-        unlockedSlotIndices: Set<Int>? = nil
+        unlockedSlotIndices: Set<Int>? = nil,
+        remainingText: String? = nil
     ) -> DailyProgress {
         let slots = definition.slots.enumerated().map { offset, slotDefinition in
             let index = offset + 1
@@ -340,8 +352,19 @@ struct RewardEngine {
             slots: slots,
             display: definition.display,
             showsCycleAdvanceButton: definition.showsCycleAdvanceButton,
-            rowCapacity: definition.rowCapacity
+            rowCapacity: definition.rowCapacity,
+            remainingText: remainingText
         )
+    }
+
+    private func activityRerunRemainingText(now: Date) -> String? {
+        let endDate = RewardSchedule.pullPlanBanners
+            .filter { $0.title == "复刻池" && $0.isActive(at: now, calendar: calendar) }
+            .map { $0.endsAt(in: calendar) }
+            .max()
+
+        guard let endDate else { return nil }
+        return remainingText(until: endDate, now: now, hourSuffix: "小时")
     }
 
     private func makeDailyRewards(for day: DayStamp, claimedKeys: Set<String>) -> [RewardItem] {

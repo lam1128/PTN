@@ -583,6 +583,14 @@ struct MainWidgetView: View {
                 )
             }
 
+            DailyProgressView(
+                progress: store.activityRerunProgress,
+                onTapSlot: { slot in
+                    store.toggleDailyProgressSlot(store.activityRerunProgress, slot: slot)
+                },
+                onAdvanceCycle: {}
+            )
+
             ForEach(dataGapRewards) { reward in
                 manualRewardRow(reward)
             }
@@ -1524,6 +1532,12 @@ private struct DailyProgressView: View {
 
                 Spacer(minLength: 0)
 
+                if let remainingText = progress.remainingText {
+                    Text(remainingText)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(WidgetPalette.accentSoft)
+                }
+
                 if progress.rowCapacity != nil,
                    progress.display == .value,
                    !progress.showsCycleAdvanceButton {
@@ -1987,14 +2001,15 @@ private struct PullPlanPityField: View {
                     font: NSFont.systemFont(ofSize: 11, weight: .semibold),
                     onCommit: commitText
                 )
+                .padding(.horizontal, 4)
 #else
                 TextField("0", text: editingText)
                     .keyboardType(.numberPad)
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundStyle(WidgetPalette.accent)
                     .onSubmit(commitText)
-#endif
                 .padding(.horizontal, 4)
+#endif
             }
             .frame(width: 38, height: 26)
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))

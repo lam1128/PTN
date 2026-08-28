@@ -13,6 +13,7 @@ final class AppStateStore: ObservableObject {
     @Published private(set) var manualUnknownRewards: [ManualUnknownReward] = []
     @Published private(set) var dailyExtraRewards: [RewardItem] = []
     @Published private(set) var dailyProgresses: [DailyProgress] = []
+    @Published private(set) var activityRerunProgress: DailyProgress
     @Published private(set) var weeklyInspectionProgress: DailyProgress
     @Published private(set) var permanentProgresses: [DailyProgress]
     @Published private(set) var secretPassProgress: SecretPassProgress
@@ -92,7 +93,17 @@ final class AppStateStore: ObservableObject {
             slots: [],
             display: RewardSchedule.weeklyInspectionProgressDefinition.display,
             showsCycleAdvanceButton: false,
-            rowCapacity: RewardSchedule.weeklyInspectionProgressDefinition.rowCapacity
+            rowCapacity: RewardSchedule.weeklyInspectionProgressDefinition.rowCapacity,
+            remainingText: nil
+        )
+        self.activityRerunProgress = DailyProgress(
+            id: RewardSchedule.activityRerunDefinition.id,
+            title: RewardSchedule.activityRerunDefinition.title,
+            slots: [],
+            display: RewardSchedule.activityRerunDefinition.display,
+            showsCycleAdvanceButton: RewardSchedule.activityRerunDefinition.showsCycleAdvanceButton,
+            rowCapacity: RewardSchedule.activityRerunDefinition.rowCapacity,
+            remainingText: nil
         )
         self.permanentProgresses = []
         self.secretPassProgress = SecretPassProgress(
@@ -352,6 +363,7 @@ final class AppStateStore: ObservableObject {
         manualUnknownRewards = snapshot.manualUnknownRewards
         dailyExtraRewards = snapshot.dailyExtraRewards
         dailyProgresses = snapshot.dailyProgresses
+        activityRerunProgress = snapshot.activityRerunProgress
         weeklyInspectionProgress = snapshot.weeklyInspectionProgress
         permanentProgresses = snapshot.permanentProgresses
         secretPassProgress = snapshot.secretPassProgress

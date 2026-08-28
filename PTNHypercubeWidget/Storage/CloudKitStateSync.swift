@@ -1,6 +1,6 @@
 import Combine
 import Foundation
-#if canImport(CloudKit)
+#if os(macOS) && canImport(CloudKit) && !STANDALONE_BUILD
 import CloudKit
 #endif
 
@@ -67,7 +67,7 @@ extension Notification.Name {
     static let appStateDidChange = Notification.Name("PTNAppStateDidChange")
 }
 
-#if canImport(CloudKit)
+#if os(macOS) && canImport(CloudKit) && !STANDALONE_BUILD
 @MainActor
 final class CloudKitStateSync: ObservableObject {
     private static let recordType = "PTNAppState"
@@ -84,9 +84,6 @@ final class CloudKitStateSync: ObservableObject {
     }
 
     deinit {
-        if let observer {
-            NotificationCenter.default.removeObserver(observer)
-        }
         uploadTask?.cancel()
     }
 
