@@ -13,7 +13,11 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "PTNHypercubeWidget",
-            path: "PTNHypercubeWidget"
+            path: "PTNHypercubeWidget",
+            exclude: [
+                "App/PTNHypercubeWidgetMac.entitlements",
+                "App/PTNHypercubeWidgetiOS.entitlements"
+            ]
         )
     ]
 )

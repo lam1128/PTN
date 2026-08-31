@@ -1232,6 +1232,13 @@ final class AppStateStore: ObservableObject {
         guard !rawValues.isEmpty else { return rawValues }
 
         var migrated = rawValues
+        let legacySharedKey = "pull-plan-pity-single-arrest"
+        if let sharedValue = migrated.removeValue(forKey: legacySharedKey) {
+            for key in ["pull-plan-pity-event-arrest", "pull-plan-pity-routine-arrest"]
+                where migrated[key] == nil {
+                migrated[key] = sharedValue
+            }
+        }
 
         for banner in RewardSchedule.pullPlanBanners {
             let legacyKey = "pull-plan-pity-\(banner.id)"

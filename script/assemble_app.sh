@@ -8,6 +8,7 @@ APP_NAME="PTNHypercubeWidget"
 BUNDLE_ID="com.openai.PTNHypercubeWidget"
 APP_BUNDLE="${2:-$ROOT_DIR/dist/$APP_NAME.app}"
 ENTITLEMENTS="$ROOT_DIR/PTNHypercubeWidget/App/PTNHypercubeWidgetMac.entitlements"
+OUTPUT_DIR="$(dirname "$APP_BUNDLE")"
 
 case "$CONFIGURATION" in
     debug|release) ;;
@@ -18,7 +19,7 @@ case "$CONFIGURATION" in
 esac
 
 cd "$ROOT_DIR"
-swift build -c "$CONFIGURATION"
+swift build -c "$CONFIGURATION" -Xswiftc -DSTANDALONE_BUILD
 BIN_PATH="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 BUILD_BINARY="$BIN_PATH/$APP_NAME"
 
@@ -27,12 +28,16 @@ BUILD_BINARY="$BIN_PATH/$APP_NAME"
     exit 3
 }
 
-rm -rf "$APP_BUNDLE"
-mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
-cp "$BUILD_BINARY" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
-chmod +x "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+mkdir -p "$OUTPUT_DIR"
+STAGING_ROOT="$(mktemp -d "$OUTPUT_DIR/.${APP_NAME}.build.XXXXXX")"
+STAGING_APP="$STAGING_ROOT/$APP_NAME.app"
+trap 'rm -rf "$STAGING_ROOT"' EXIT
 
-cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
+mkdir -p "$STAGING_APP/Contents/MacOS" "$STAGING_APP/Contents/Resources"
+cp "$BUILD_BINARY" "$STAGING_APP/Contents/MacOS/$APP_NAME"
+chmod +x "$STAGING_APP/Contents/MacOS/$APP_NAME"
+
+cat > "$STAGING_APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -51,10 +56,23 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 
-plutil -lint "$APP_BUNDLE/Contents/Info.plist" >/dev/null
+plutil -lint "$STAGING_APP/Contents/Info.plist" >/dev/null
+
+if command -v xattr >/dev/null 2>&1; then
+    xattr -cr "$STAGING_APP" 2>/dev/null || true
+fi
 
 if command -v codesign >/dev/null 2>&1; then
-    codesign --force --deep --sign "${CODESIGN_IDENTITY:--}" --identifier "$BUNDLE_ID" --entitlements "$ENTITLEMENTS" "$APP_BUNDLE" >/dev/null 2>&1 || true
+    if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
+        codesign --force --deep --sign "$CODESIGN_IDENTITY" --identifier "$BUNDLE_ID" --entitlements "$ENTITLEMENTS" "$STAGING_APP"
+    else
+        # Ad-hoc local builds cannot carry CloudKit entitlements without a team.
+        codesign --force --deep --sign - --identifier "$BUNDLE_ID" "$STAGING_APP"
+    fi
+    codesign --verify --deep --strict "$STAGING_APP"
 fi
+
+rm -rf "$APP_BUNDLE"
+mv "$STAGING_APP" "$APP_BUNDLE"
 
 echo "$APP_BUNDLE"

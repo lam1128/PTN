@@ -172,7 +172,9 @@ enum RewardSchedule {
                     completionBonus: .zero
                 )
             },
-            display: .value
+            display: .value,
+            showsCycleAdvanceButton: true,
+            resetsDaily: false
         ),
         DailyProgressDefinition(
             id: dailyReviewID,
@@ -766,17 +768,39 @@ enum RewardSchedule {
         at date: Date,
         calendar: Calendar = .rewardCalendar
     ) -> String {
-        pullPlanBanners
-            .filter { $0.title == "复刻池" && $0.startsAt(in: calendar) <= date }
-            .max { lhs, rhs in
-                if lhs.start != rhs.start { return lhs.start < rhs.start }
-                return lhs.id < rhs.id
-            }?
-            .start.key ?? "activity-rerun"
+        activityRerunCycleBanners(at: date, calendar: calendar).first?.start.key
+            ?? "activity-rerun"
     }
 
-    // 抽卡规划的“垫抽数”按实际卡池体系共用：
-    // - 活动池 / 复刻池：共用同一套垫抽
+    // 同期开启的复刻池（例如 Rust 与 Margaret）共享同一组开始和结束时间。
+    static func currentActivityRerunWindow(
+        at date: Date,
+        calendar: Calendar = .rewardCalendar
+    ) -> (start: Date, end: Date)? {
+        let banners = activityRerunCycleBanners(at: date, calendar: calendar)
+        guard let first = banners.first,
+              let end = banners.map({ $0.endsAt(in: calendar) }).max() else {
+            return nil
+        }
+        return (first.startsAt(in: calendar), end)
+    }
+
+    private static func activityRerunCycleBanners(
+        at date: Date,
+        calendar: Calendar
+    ) -> [PullPlanBanner] {
+        let rerunBanners = pullPlanBanners.filter { $0.title == "复刻池" }
+        guard let start = rerunBanners
+            .map({ $0.startsAt(in: calendar) })
+            .filter({ $0 <= date })
+            .max() else {
+            return []
+        }
+        return rerunBanners.filter { $0.startsAt(in: calendar) == start }
+    }
+
+    // 抽卡规划的“垫抽数”按池子规则分别保存：
+    // - 活动池、复刻池：各自独立计算
     // - 定轨池：共用同一套垫抽
     // - 统合池：共用同一套垫抽
     // - 限定池：共用同一套垫抽
@@ -790,8 +814,10 @@ enum RewardSchedule {
 
     static func pullPlanPityGroupKey(for banner: PullPlanBanner) -> String {
         switch banner.title {
-        case "活动池", "复刻池":
-            return "pull-plan-pity-single-arrest"
+        case "活动池":
+            return "pull-plan-pity-event-arrest"
+        case "复刻池":
+            return "pull-plan-pity-routine-arrest"
         case "定轨池":
             return "pull-plan-pity-directional-arrest"
         case "统合池":

@@ -358,13 +358,13 @@ struct RewardEngine {
     }
 
     private func activityRerunRemainingText(now: Date) -> String? {
-        let endDate = RewardSchedule.pullPlanBanners
-            .filter { $0.title == "复刻池" && $0.isActive(at: now, calendar: calendar) }
-            .map { $0.endsAt(in: calendar) }
-            .max()
-
-        guard let endDate else { return nil }
-        return remainingText(until: endDate, now: now, hourSuffix: "小时")
+        guard let window = RewardSchedule.currentActivityRerunWindow(
+            at: now,
+            calendar: calendar
+        ), window.start <= now, now < window.end else {
+            return nil
+        }
+        return remainingText(until: window.end, now: now, hourSuffix: "小时")
     }
 
     private func makeDailyRewards(for day: DayStamp, claimedKeys: Set<String>) -> [RewardItem] {
