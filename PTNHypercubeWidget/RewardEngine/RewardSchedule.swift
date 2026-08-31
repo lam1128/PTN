@@ -70,9 +70,9 @@ struct DailyProgressDefinition: Identifiable, Hashable {
 
 enum RewardSchedule {
     // 暗域锚点：
-    // 2026-07-20 是第 31 期第 1 周的周一，之后严格按 6 周一赛季循环。
+    // 2026-08-10 是第 31 期第 1 周的周一，之后严格按 6 周一赛季循环。
     static let darkZoneAnchorSeason = 31
-    static let darkZoneAnchorMonday = DayStamp(year: 2026, month: 7, day: 20)
+    static let darkZoneAnchorMonday = DayStamp(year: 2026, month: 8, day: 10)
     static let darkZoneCycleWeeks = 6
     static let darkZoneWeeklyValue = RewardValue(crystals: 510)
     static let darkZoneSeasonOpeningBonus = RewardValue(crystals: 450)
