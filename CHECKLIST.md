@@ -13,9 +13,8 @@
 ## 编译与启动
 
 - [ ] `./build-standalone-app.sh` 编译成功。
-- [ ] Xcode 中可选择 `PTNHypercubeWidgetiOS` target，并在 iPhone 模拟器或真机编译。
-- [ ] iOS target 已启用 `iCloud.com.openai.PTNHypercubeWidget` CloudKit 容器。
-- [ ] Mac 与 iPhone 登录同一 Apple ID 后，库存、领取记录、历史和抽卡规划可互相同步。
+- [ ] Windows 端安装 .NET 8 SDK 后可编译并启动 `Windows/PTNWindowsWidget`。
+- [ ] Mac 与 Windows 选择同一个 OneDrive `ptn-shared-state.json` 后可互相读取库存和领取记录。
 - [ ] `dist/PTNHypercubeWidget.app` 成功打开。
 - [ ] 应用启动后没有崩溃、白屏或空窗口。
 - [ ] 状态栏 M 图标正常显示，菜单可以显示、隐藏、切换透明度和退出。
@@ -567,3 +566,13 @@
 - 范围：抽卡记录库存扣减、历史生成与撤销，以及 S1N 卡池和兑换码请求逻辑。
 - 结果：赠送票不扣库存，蓝票不足部分正确折算异方晶，撤销后库存与卡池记录完整恢复；S1N 请求统一复用共享入口。
 - 检查：`git diff --check`、warnings-as-errors 类型检查及隔离 UserDefaults 回归测试通过。
+
+### 2026-09-01 Windows 版本初步检查
+
+- 范围：WPF 工程、OneDrive JSON 状态格式、Mac 端共享文件读写和 Windows 基础奖励交互。
+- 结果：使用临时 .NET 8 SDK 完成 Windows Release 编译和发布，并启动最新版本；Mac 编译及跨设备完整回归仍需在 Mac 上检查。
+
+### 2026-09-01 Windows 功能对齐补充
+
+- 范围：四个主区、卡池目标/锁数/垫抽、抽卡记录、普池记录、密令高级奖励、N9/N10、兑换码和自动库存。
+- 结果：Windows 端已加入对应入口和共享存档键映射；仍需安装 .NET 8 SDK 后完成实际编译及交互回归。

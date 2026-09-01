@@ -1,0 +1,124 @@
+<Window x:Class="PTNWindowsWidget.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="异方晶"
+        Width="360"
+        Height="620"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False">
+    <Border CornerRadius="24"
+            Margin="8"
+            Padding="16"
+            Background="#FFF9FC"
+            BorderBrush="#55D68AA8"
+            BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" MouseLeftButtonDown="HeaderMouseLeftButtonDown">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="异方晶"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource InkBrush}" />
+                    <TextBlock x:Name="DateText"
+                               Margin="0,3,0,0"
+                               FontSize="11"
+                               Foreground="{StaticResource MutedBrush}" />
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Width="28"
+                        Height="28"
+                        Content="×"
+                        FontSize="18"
+                        Foreground="{StaticResource MutedBrush}"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="CloseButtonClick" />
+            </Grid>
+
+            <Border Grid.Row="1"
+                    Margin="0,14,0,12"
+                    Padding="12"
+                    CornerRadius="16"
+                    Background="#12D94E86">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="总抽数" FontSize="10" Foreground="{StaticResource MutedBrush}" />
+                        <TextBlock x:Name="TotalDrawsText" FontSize="22" FontWeight="Bold" Foreground="{StaticResource InkBrush}" />
+                    </StackPanel>
+                    <Button Grid.Column="1"
+                            HorizontalAlignment="Right"
+                            Padding="9,5"
+                            Content="编辑库存"
+                            Foreground="{StaticResource AccentBrush}"
+                            Background="#18D94E86"
+                            BorderBrush="#38D94E86"
+                            Click="EditInventoryClick" />
+                    <TextBlock Grid.Row="1" Margin="0,8,0,0" x:Name="InventoryText" FontSize="11" Foreground="{StaticResource InkBrush}" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,8,0,0" x:Name="TodayIncomeText" HorizontalAlignment="Right" FontSize="11" Foreground="{StaticResource AccentBrush}" />
+                </Grid>
+            </Border>
+
+            <TabControl Grid.Row="2"
+                        x:Name="MainTabs"
+                        Background="Transparent"
+                        BorderThickness="0">
+                <TabItem Header="当前周期">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="RewardPanel" />
+                    </ScrollViewer>
+                </TabItem>
+                <TabItem Header="常驻奖励">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="PermanentPanel" />
+                    </ScrollViewer>
+                </TabItem>
+                <TabItem Header="抽卡规划">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="PullPlanPanel" />
+                    </ScrollViewer>
+                </TabItem>
+                <TabItem Header="抽卡记录">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="RecordsPanel" />
+                    </ScrollViewer>
+                </TabItem>
+            </TabControl>
+
+            <StackPanel Grid.Row="3" Margin="0,12,0,0">
+                <TextBlock x:Name="SyncStatusText"
+                           Margin="0,0,0,8"
+                           FontSize="10"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource MutedBrush}" />
+                <UniformGrid Rows="1" Columns="3">
+                    <Button Margin="0,0,5,0" Content="历史" Click="HistoryClick" />
+                    <Button Margin="2,0,2,0" Content="同步文件" Click="ChooseSyncFileClick" />
+                    <Button Margin="5,0,0,0" Content="刷新" Click="RefreshClick" />
+                </UniformGrid>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

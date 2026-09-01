@@ -8,5 +8,8 @@ DerivedData/
 *.swp
 *.tmp
 
+Windows/**/bin/
+Windows/**/obj/
+
 PTNHypercubeWidget.xcodeproj/xcuserdata/
 PTNHypercubeWidget.xcodeproj/project.xcworkspace/xcuserdata/

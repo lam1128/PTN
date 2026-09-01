@@ -141,7 +141,7 @@ struct MainWidgetView: View {
     @ObservedObject var store: AppStateStore
     @StateObject private var giftCodeStore = GiftCodeStore()
     @StateObject private var pullPlanSyncStore = PullPlanSyncStore()
-    @StateObject private var cloudSync = CloudKitStateSync()
+    @StateObject private var oneDriveSync = OneDriveStateSync()
 
     @State private var activeSheet: ActiveSheet?
     @State private var selectedPrimarySection: PrimarySection = .currentPeriod
@@ -381,12 +381,13 @@ struct MainWidgetView: View {
             store.refreshRewards()
             giftCodeStore.refreshIfNeeded()
             pullPlanSyncStore.refreshIfNeeded()
-            cloudSync.start(store: store)
+            oneDriveSync.start(store: store)
         }
         .onReceive(refreshTimer) { now in
             store.refreshRewards(now: now)
             giftCodeStore.refreshIfNeeded(now: now)
             pullPlanSyncStore.refreshIfNeeded(now: now)
+            oneDriveSync.refreshIfNeeded()
         }
         .onChange(of: pullPlanSyncStore.revision) {
             store.refreshRewards()

@@ -17,6 +17,7 @@
 		845FC952304084640017A78F /* S1NSyncSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020001000000010000000D /* S1NSyncSupport.swift */; };
 		845FC953304084640017A78F /* MainWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000007 /* MainWidgetView.swift */; };
 		845FC954304084640017A78F /* Sheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000008 /* Sheets.swift */; };
+		845FC955304084640017A78F /* OneDriveStateSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000014 /* OneDriveStateSync.swift */; };
 		A00100010000000100000001 /* PTNHypercubeWidgetApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000001 /* PTNHypercubeWidgetApp.swift */; };
 		A00100010000000100000003 /* RewardModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000003 /* RewardModels.swift */; };
 		A00100010000000100000004 /* RewardSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000004 /* RewardSchedule.swift */; };
@@ -31,6 +32,7 @@
 		A0010001000000010000000E /* CloudKitStateSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020001000000010000000E /* CloudKitStateSync.swift */; };
 		A0010001000000010000000F /* PTNHypercubeWidgetiOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0020001000000010000000F /* PTNHypercubeWidgetiOSApp.swift */; };
 		A00100010000000100000010 /* WidgetSupportViews_iOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000010 /* WidgetSupportViews_iOS.swift */; };
+		A00100010000000100000011 /* OneDriveStateSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200010000000100000014 /* OneDriveStateSync.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -52,6 +54,7 @@
 		A00200010000000100000011 /* PTNHypercubeWidgetMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PTNHypercubeWidgetMac.entitlements; sourceTree = "<group>"; };
 		A00200010000000100000012 /* PTNHypercubeWidgetiOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PTNHypercubeWidgetiOS.entitlements; sourceTree = "<group>"; };
 		A00200010000000100000013 /* PTNHypercubeWidgetiOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PTNHypercubeWidgetiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A00200010000000100000014 /* OneDriveStateSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveStateSync.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -128,6 +131,7 @@
 				A0020001000000010000000C /* PullPlanSyncStore.swift */,
 				A0020001000000010000000D /* S1NSyncSupport.swift */,
 				A0020001000000010000000E /* CloudKitStateSync.swift */,
+				A00200010000000100000014 /* OneDriveStateSync.swift */,
 			);
 			path = Storage;
 			sourceTree = "<group>";
@@ -265,6 +269,7 @@
 				A0010001000000010000000C /* PullPlanSyncStore.swift in Sources */,
 				A0010001000000010000000D /* S1NSyncSupport.swift in Sources */,
 				A0010001000000010000000E /* CloudKitStateSync.swift in Sources */,
+				A00100010000000100000011 /* OneDriveStateSync.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -284,6 +289,7 @@
 				845FC953304084640017A78F /* MainWidgetView.swift in Sources */,
 				845FC954304084640017A78F /* Sheets.swift in Sources */,
 				A00100010000000100000010 /* WidgetSupportViews_iOS.swift in Sources */,
+				845FC955304084640017A78F /* OneDriveStateSync.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
