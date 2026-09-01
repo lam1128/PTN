@@ -756,6 +756,10 @@ struct MainWidgetView: View {
             ForEach(store.pullPlanRecordSummaries) { summary in
                 PullPlanRecordSummaryRow(summary: summary)
             }
+
+            GeneralPoolRecordRow(record: store.generalPoolRecord) {
+                activeSheet = .generalPoolRecord
+            }
         }
     }
 
@@ -1123,6 +1127,22 @@ struct MainWidgetView: View {
                 } onClose: {
                     activeSheet = nil
                 }
+            }
+            .frame(width: 286)
+        case .generalPoolRecord:
+            WidgetPopupContainer {
+                GeneralPoolRecordSheet(
+                    currentRecord: store.generalPoolRecord,
+                    onSave: { blueTickets, redTickets, upCount in
+                        store.setGeneralPoolRecord(
+                            blueTickets: blueTickets,
+                            redTickets: redTickets,
+                            upCount: upCount
+                        )
+                        activeSheet = nil
+                    },
+                    onClose: { activeSheet = nil }
+                )
             }
             .frame(width: 286)
         }
@@ -2072,38 +2092,59 @@ private struct PullPlanRecordSummaryRow: View {
             Spacer(minLength: 8)
 
             HStack(spacing: 8) {
-                HStack(spacing: 3) {
-                    Text("抽数")
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundStyle(WidgetPalette.mutedText)
-                    Text("\(summary.drawCount)")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(WidgetPalette.titleSecondary)
-                }
-
-                HStack(spacing: 3) {
-                    Text("UP数")
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundStyle(WidgetPalette.mutedText)
-                    Text("\(summary.upCount)")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(WidgetPalette.titleSecondary)
-                }
-
-                HStack(spacing: 3) {
-                    Text("UP总数")
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .foregroundStyle(WidgetPalette.mutedText)
-                    Text("\(summary.upTotal)")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(WidgetPalette.titleSecondary)
-                }
+                PullPlanRecordMetric(title: "抽数", value: summary.drawCount)
+                PullPlanRecordMetric(title: "UP数", value: summary.upCount)
+                PullPlanRecordMetric(title: "UP总数", value: summary.upTotal)
             }
             .fixedSize(horizontal: true, vertical: false)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(11)
         .widgetRoundedCard(fill: Color.white.opacity(0.18))
+    }
+}
+
+private struct GeneralPoolRecordRow: View {
+    let record: GeneralPoolRecord
+    let onEdit: () -> Void
+
+    var body: some View {
+        Button(action: onEdit) {
+            HStack(spacing: 6) {
+                Text("普池")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(WidgetPalette.titlePrimary)
+
+                Spacer(minLength: 8)
+
+                HStack(spacing: 8) {
+                    PullPlanRecordMetric(title: "蓝票", value: record.blueTickets)
+                    PullPlanRecordMetric(title: "红票", value: record.redTickets)
+                    PullPlanRecordMetric(title: "UP数", value: record.upCount)
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(11)
+            .widgetRoundedCard(fill: Color.white.opacity(0.18))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct PullPlanRecordMetric: View {
+    let title: String
+    let value: Int
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Text(title)
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundStyle(WidgetPalette.mutedText)
+            Text("\(value)")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(WidgetPalette.titleSecondary)
+        }
     }
 }
 
@@ -2232,6 +2273,7 @@ private enum ActiveSheet: Identifiable, Equatable {
     case consumption
     case increase
     case pullPlanRecord(String)
+    case generalPoolRecord
 
     var id: String {
         switch self {
@@ -2241,6 +2283,7 @@ private enum ActiveSheet: Identifiable, Equatable {
         case .consumption: return "consumption"
         case .increase: return "increase"
         case .pullPlanRecord(let bannerID): return "pull-plan-record-\(bannerID)"
+        case .generalPoolRecord: return "general-pool-record"
         }
     }
 }

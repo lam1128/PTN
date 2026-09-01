@@ -20,6 +20,7 @@ struct AppStateCloudSnapshot: Codable {
     let selectedPullPlanLockChoices: [String: Int]
     let pullPlanPityValues: [String: Int]
     let pullPlanTicketRecords: [String: PullPlanTicketRecord]
+    let generalPoolRecord: GeneralPoolRecord?
     let hasPremiumSecretPass: Bool
     let usesExtraTranslucentBackground: Bool
     let automaticStorageLastUpdateAt: Date?
@@ -38,6 +39,7 @@ struct AppStateCloudSnapshot: Codable {
         selectedPullPlanLockChoices: [String: Int],
         pullPlanPityValues: [String: Int],
         pullPlanTicketRecords: [String: PullPlanTicketRecord],
+        generalPoolRecord: GeneralPoolRecord,
         hasPremiumSecretPass: Bool,
         usesExtraTranslucentBackground: Bool,
         automaticStorageLastUpdateAt: Date?,
@@ -56,6 +58,7 @@ struct AppStateCloudSnapshot: Codable {
         self.selectedPullPlanLockChoices = selectedPullPlanLockChoices
         self.pullPlanPityValues = pullPlanPityValues
         self.pullPlanTicketRecords = pullPlanTicketRecords
+        self.generalPoolRecord = generalPoolRecord
         self.hasPremiumSecretPass = hasPremiumSecretPass
         self.usesExtraTranslucentBackground = usesExtraTranslucentBackground
         self.automaticStorageLastUpdateAt = automaticStorageLastUpdateAt

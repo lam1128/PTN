@@ -183,13 +183,13 @@ struct PullPlanTicketRecordSheet: View {
             panelHeader("记录·\(bannerTitle)", onClose: onClose)
 
             HStack(spacing: 10) {
-                ticketField("赠送票", text: $giftTicketDraft, onSubmit: submit)
-                ticketField("蓝票", text: $blueTicketDraft, onSubmit: submit)
+                RecordNumberField(title: "赠送票", text: $giftTicketDraft, onSubmit: submit)
+                RecordNumberField(title: "蓝票", text: $blueTicketDraft, onSubmit: submit)
             }
 
             HStack(spacing: 10) {
-                ticketField("UP数", text: $upCountDraft, onSubmit: submit)
-                ticketField("UP总数", text: upTotalEditingBinding, onSubmit: submit)
+                RecordNumberField(title: "UP数", text: $upCountDraft, onSubmit: submit)
+                RecordNumberField(title: "UP总数", text: upTotalEditingBinding, onSubmit: submit)
             }
 
             HStack {
@@ -240,25 +240,87 @@ struct PullPlanTicketRecordSheet: View {
         }
     }
 
-    private func ticketField(
-        _ title: String,
-        text: Binding<String>,
-        onSubmit: @escaping () -> Void
-    ) -> some View {
+    private func filteredNumber(_ value: String) -> String {
+        String(value.filter(\.isNumber).prefix(4))
+    }
+}
+
+struct GeneralPoolRecordSheet: View {
+    let currentRecord: GeneralPoolRecord
+    let onSave: (Int, Int, Int) -> Void
+    let onClose: () -> Void
+
+    @State private var blueTicketDraft: String
+    @State private var redTicketDraft: String
+    @State private var upCountDraft: String
+
+    init(
+        currentRecord: GeneralPoolRecord,
+        onSave: @escaping (Int, Int, Int) -> Void,
+        onClose: @escaping () -> Void
+    ) {
+        self.currentRecord = currentRecord
+        self.onSave = onSave
+        self.onClose = onClose
+        _blueTicketDraft = State(initialValue: Self.text(for: currentRecord.blueTickets))
+        _redTicketDraft = State(initialValue: Self.text(for: currentRecord.redTickets))
+        _upCountDraft = State(initialValue: Self.text(for: currentRecord.upCount))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            panelHeader("记录·普池", onClose: onClose)
+
+            HStack(spacing: 10) {
+                RecordNumberField(title: "蓝票", text: $blueTicketDraft, onSubmit: submit)
+                RecordNumberField(title: "红票", text: $redTicketDraft, onSubmit: submit)
+            }
+
+            RecordNumberField(title: "UP数", text: $upCountDraft, onSubmit: submit)
+
+            HStack {
+                Button("取消", action: onClose)
+                Spacer()
+                Button("确认", action: submit)
+                    .buttonStyle(.borderedProminent)
+                    .tint(WidgetPalette.pink)
+            }
+        }
+        .padding(16)
+    }
+
+    private func submit() {
+        onSave(
+            Int(blueTicketDraft) ?? 0,
+            Int(redTicketDraft) ?? 0,
+            Int(upCountDraft) ?? 0
+        )
+    }
+
+    private static func text(for value: Int) -> String {
+        value == 0 ? "" : String(value)
+    }
+}
+
+private struct RecordNumberField: View {
+    let title: String
+    @Binding var text: String
+    let onSubmit: () -> Void
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             Text(title)
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .foregroundStyle(WidgetPalette.titlePrimary)
 
-            TextField("0", text: text)
+            TextField("0", text: $text)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(onSubmit)
+                .onChange(of: text) { _, value in
+                    text = String(value.filter(\.isNumber).prefix(4))
+                }
         }
         .frame(maxWidth: .infinity)
-    }
-
-    private func filteredNumber(_ value: String) -> String {
-        String(value.filter(\.isNumber).prefix(4))
     }
 }
 

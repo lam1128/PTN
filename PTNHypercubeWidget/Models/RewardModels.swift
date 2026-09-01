@@ -245,6 +245,59 @@ struct PullPlanRecordSummary: Identifiable, Hashable {
     let upTotal: Int
 }
 
+struct GeneralPoolRecord: Codable, Hashable {
+    let blueTickets: Int
+    let redTickets: Int
+    let upCount: Int
+    let consumedBlueTickets: Int
+    let consumedRedTickets: Int
+
+    static let empty = GeneralPoolRecord(
+        blueTickets: 0,
+        redTickets: 0,
+        upCount: 0,
+        consumedBlueTickets: 0,
+        consumedRedTickets: 0
+    )
+
+    var isEmpty: Bool {
+        blueTickets == 0 && redTickets == 0 && upCount == 0
+    }
+
+    init(
+        blueTickets: Int,
+        redTickets: Int,
+        upCount: Int,
+        consumedBlueTickets: Int? = nil,
+        consumedRedTickets: Int? = nil
+    ) {
+        self.blueTickets = blueTickets
+        self.redTickets = redTickets
+        self.upCount = upCount
+        self.consumedBlueTickets = consumedBlueTickets ?? blueTickets
+        self.consumedRedTickets = consumedRedTickets ?? redTickets
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case blueTickets
+        case redTickets
+        case upCount
+        case consumedBlueTickets
+        case consumedRedTickets
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            blueTickets: try container.decodeIfPresent(Int.self, forKey: .blueTickets) ?? 0,
+            redTickets: try container.decodeIfPresent(Int.self, forKey: .redTickets) ?? 0,
+            upCount: try container.decodeIfPresent(Int.self, forKey: .upCount) ?? 0,
+            consumedBlueTickets: try container.decodeIfPresent(Int.self, forKey: .consumedBlueTickets) ?? 0,
+            consumedRedTickets: try container.decodeIfPresent(Int.self, forKey: .consumedRedTickets) ?? 0
+        )
+    }
+}
+
 
 struct ManualUnknownReward: Identifiable, Hashable {
     let id: String

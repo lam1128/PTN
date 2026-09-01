@@ -29,6 +29,7 @@ final class AppStateStore: ObservableObject {
     @Published private(set) var selectedPullPlanLockChoices: [String: Int]
     @Published private(set) var pullPlanPityValues: [String: Int]
     @Published private(set) var pullPlanTicketRecords: [String: PullPlanTicketRecord]
+    @Published private(set) var generalPoolRecord: GeneralPoolRecord
 
     private let defaults: UserDefaults
     private let rewardEngine: RewardEngine
@@ -51,6 +52,7 @@ final class AppStateStore: ObservableObject {
         static let selectedPullPlanLockChoices = "ptn.selectedPullPlanLockChoices"
         static let pullPlanPityValues = "ptn.pullPlanPityValues"
         static let pullPlanTicketRecords = "ptn.pullPlanTicketRecords"
+        static let generalPoolRecord = "ptn.generalPoolRecord"
         static let usesExtraTranslucentBackground = "ptn.usesExtraTranslucentBackground"
         static let hasPremiumSecretPass = "ptn.hasPremiumSecretPass"
         static let automaticStorageLastUpdateAt = "ptn.automaticStorageLastUpdateAt"
@@ -84,6 +86,9 @@ final class AppStateStore: ObservableObject {
         self.pullPlanPityValues = Self.migratedPullPlanPityValues(from: savedPullPlanPityValues)
         self.pullPlanTicketRecords = Self.loadPullPlanTicketRecords(
             from: defaults.data(forKey: StorageKey.pullPlanTicketRecords)
+        )
+        self.generalPoolRecord = Self.loadGeneralPoolRecord(
+            from: defaults.data(forKey: StorageKey.generalPoolRecord)
         )
         self.hasPremiumSecretPass = defaults.object(forKey: StorageKey.hasPremiumSecretPass) as? Bool ?? false
         self.usesExtraTranslucentBackground = defaults.object(forKey: StorageKey.usesExtraTranslucentBackground) as? Bool ?? false
@@ -174,6 +179,7 @@ final class AppStateStore: ObservableObject {
         )
         migratePullPlanRecordHistorySources()
         ensurePullPlanRecordHistory()
+        ensureGeneralPoolRecordHistory()
         removeObsoleteReviewCompletionRewards()
         bootstrapInitialStateIfNeeded()
         calibrateAutomaticStorageIfNeeded()
@@ -191,6 +197,7 @@ final class AppStateStore: ObservableObject {
             || !selectedPullPlanLockChoices.isEmpty
             || !pullPlanPityValues.isEmpty
             || !pullPlanTicketRecords.isEmpty
+            || !generalPoolRecord.isEmpty
             || hasPremiumSecretPass
     }
 
@@ -216,6 +223,7 @@ final class AppStateStore: ObservableObject {
             selectedPullPlanLockChoices: selectedPullPlanLockChoices,
             pullPlanPityValues: pullPlanPityValues,
             pullPlanTicketRecords: pullPlanTicketRecords,
+            generalPoolRecord: generalPoolRecord,
             hasPremiumSecretPass: hasPremiumSecretPass,
             usesExtraTranslucentBackground: usesExtraTranslucentBackground,
             automaticStorageLastUpdateAt: defaults.object(forKey: StorageKey.automaticStorageLastUpdateAt) as? Date,
@@ -247,6 +255,7 @@ final class AppStateStore: ObservableObject {
         selectedPullPlanLockChoices = snapshot.selectedPullPlanLockChoices
         pullPlanPityValues = snapshot.pullPlanPityValues
         pullPlanTicketRecords = snapshot.pullPlanTicketRecords
+        generalPoolRecord = snapshot.generalPoolRecord ?? .empty
         hasPremiumSecretPass = snapshot.hasPremiumSecretPass
         usesExtraTranslucentBackground = snapshot.usesExtraTranslucentBackground
 
@@ -816,6 +825,93 @@ final class AppStateStore: ObservableObject {
         refreshRewards(now: now)
     }
 
+    func setGeneralPoolRecord(
+        blueTickets: Int,
+        redTickets: Int,
+        upCount: Int,
+        now: Date = Date()
+    ) {
+        let sanitizedBlueTickets = max(0, blueTickets)
+        let sanitizedRedTickets = max(0, redTickets)
+        guard sanitizedBlueTickets <= totalBlueTickets + generalPoolRecord.consumedBlueTickets,
+              sanitizedRedTickets <= totalRedTickets + generalPoolRecord.consumedRedTickets else {
+            return
+        }
+
+        restoreGeneralPoolConsumption()
+        totalBlueTickets -= sanitizedBlueTickets
+        totalRedTickets -= sanitizedRedTickets
+
+        let updated = GeneralPoolRecord(
+            blueTickets: sanitizedBlueTickets,
+            redTickets: sanitizedRedTickets,
+            upCount: max(0, upCount),
+            consumedBlueTickets: sanitizedBlueTickets,
+            consumedRedTickets: sanitizedRedTickets
+        )
+        generalPoolRecord = updated
+
+        if !updated.isEmpty {
+            history.insert(
+                HistoryEntry(
+                    timestamp: now,
+                    source: generalPoolRecordSource,
+                    value: RewardValue(
+                        blueTickets: -sanitizedBlueTickets,
+                        redTickets: -sanitizedRedTickets
+                    ),
+                    claimKey: generalPoolRecordClaimKey,
+                    amountTextOverride: generalPoolRecordAmountText(updated)
+                ),
+                at: 0
+            )
+        }
+        persist()
+        refreshRewards(now: now)
+    }
+
+    private var generalPoolRecordClaimKey: String { "general-pool-record" }
+    private var generalPoolRecordSource: String { "抽卡记录·普池" }
+
+    private func generalPoolRecordAmountText(_ record: GeneralPoolRecord) -> String {
+        var components: [String] = []
+        if record.consumedBlueTickets > 0 {
+            components.append("-\(record.consumedBlueTickets)蓝票")
+        }
+        if record.consumedRedTickets > 0 {
+            components.append("-\(record.consumedRedTickets)红票")
+        }
+        return components.isEmpty ? "已记录" : components.joined(separator: " · ")
+    }
+
+    private func ensureGeneralPoolRecordHistory() {
+        guard !generalPoolRecord.isEmpty,
+              !history.contains(where: { $0.claimKey == generalPoolRecordClaimKey }) else {
+            return
+        }
+
+        history.insert(
+            HistoryEntry(
+                timestamp: Date(),
+                source: generalPoolRecordSource,
+                value: RewardValue(
+                    blueTickets: -generalPoolRecord.consumedBlueTickets,
+                    redTickets: -generalPoolRecord.consumedRedTickets
+                ),
+                claimKey: generalPoolRecordClaimKey,
+                amountTextOverride: generalPoolRecordAmountText(generalPoolRecord)
+            ),
+            at: 0
+        )
+        persist()
+    }
+
+    private func restoreGeneralPoolConsumption() {
+        totalBlueTickets += generalPoolRecord.consumedBlueTickets
+        totalRedTickets += generalPoolRecord.consumedRedTickets
+        history.removeAll { $0.claimKey == generalPoolRecordClaimKey }
+    }
+
     private func availablePullPlanTicketEquivalent(
         restoring record: PullPlanTicketRecord
     ) -> Int {
@@ -992,6 +1088,14 @@ final class AppStateStore: ObservableObject {
             guard let claimKey = entry.claimKey else { return true }
             return !claimKey.hasPrefix(RewardSchedule.automaticStorageHistoryKey)
         }) else {
+            return
+        }
+
+        if history[index].claimKey == generalPoolRecordClaimKey {
+            restoreGeneralPoolConsumption()
+            generalPoolRecord = .empty
+            persist()
+            refreshRewards(now: now)
             return
         }
 
@@ -1173,6 +1277,9 @@ final class AppStateStore: ObservableObject {
         if let data = try? encoder.encode(pullPlanTicketRecords) {
             defaults.set(data, forKey: StorageKey.pullPlanTicketRecords)
         }
+        if let data = try? encoder.encode(generalPoolRecord) {
+            defaults.set(data, forKey: StorageKey.generalPoolRecord)
+        }
 
         if notify {
             NotificationCenter.default.post(name: .appStateDidChange, object: self)
@@ -1225,6 +1332,11 @@ final class AppStateStore: ObservableObject {
     private static func loadPullPlanTicketRecords(from data: Data?) -> [String: PullPlanTicketRecord] {
         guard let data else { return [:] }
         return (try? JSONDecoder().decode([String: PullPlanTicketRecord].self, from: data)) ?? [:]
+    }
+
+    private static func loadGeneralPoolRecord(from data: Data?) -> GeneralPoolRecord {
+        guard let data else { return .empty }
+        return (try? JSONDecoder().decode(GeneralPoolRecord.self, from: data)) ?? .empty
     }
 
 
