@@ -5,7 +5,7 @@ import Foundation
 @MainActor
 final class OneDriveStateSync: ObservableObject {
     private weak var store: AppStateStore?
-    private var observer: NSObjectProtocol?
+    nonisolated(unsafe) private var observer: NSObjectProtocol?
     private var writeTask: Task<Void, Never>?
     private var fileURL: URL?
     private var lastFileModificationDate: Date?
