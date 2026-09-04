@@ -340,8 +340,7 @@ final class AppStateStore: ObservableObject {
     private func incomeEntries(in interval: DateInterval) -> [String: Int] {
         history.reduce(into: [:]) { totals, entry in
             guard interval.contains(entry.timestamp) else { return }
-            let amount = entry.value.crystals + entry.value.blueTickets * 180
-            totals[entry.source, default: 0] += amount
+            totals[entry.source, default: 0] += entry.value.crystalEquivalent
         }
         .filter { $0.value != 0 }
     }
@@ -786,14 +785,18 @@ final class AppStateStore: ObservableObject {
         totalBlueTickets -= consumedBlueTickets
         totalCrystals -= consumedCrystals
 
+        let previousRecordedTickets = previous.blueTickets + previous.giftTickets
+        let recordedTickets = sanitizedBlueTickets + sanitizedGiftTickets
+        let initialPity = previous.isEmpty
+            ? (pullPlanPityValue(for: bannerID) ?? 0)
+            : max(0, previous.basePullCount - previousRecordedTickets)
+        let hasRecordValues = recordedTickets > 0 || upCount > 0 || upTotal > 0
         let updated = PullPlanTicketRecord(
             giftTickets: sanitizedGiftTickets,
             blueTickets: sanitizedBlueTickets,
             upCount: max(0, upCount),
             upTotal: max(0, upTotal),
-            basePullCount: (pullPlanPityValue(for: bannerID) ?? 0)
-                + sanitizedBlueTickets
-                + sanitizedGiftTickets,
+            basePullCount: hasRecordValues ? initialPity + recordedTickets : 0,
             consumedBlueTickets: consumedBlueTickets,
             consumedCrystals: consumedCrystals
         )
@@ -833,21 +836,31 @@ final class AppStateStore: ObservableObject {
     ) {
         let sanitizedBlueTickets = max(0, blueTickets)
         let sanitizedRedTickets = max(0, redTickets)
-        guard sanitizedBlueTickets <= totalBlueTickets + generalPoolRecord.consumedBlueTickets,
-              sanitizedRedTickets <= totalRedTickets + generalPoolRecord.consumedRedTickets else {
+        let untrackedBlueTickets = max(
+            0,
+            generalPoolRecord.blueTickets - generalPoolRecord.consumedBlueTickets
+        )
+        let untrackedRedTickets = max(
+            0,
+            generalPoolRecord.redTickets - generalPoolRecord.consumedRedTickets
+        )
+        let consumedBlueTickets = max(0, sanitizedBlueTickets - untrackedBlueTickets)
+        let consumedRedTickets = max(0, sanitizedRedTickets - untrackedRedTickets)
+        guard consumedBlueTickets <= totalBlueTickets + generalPoolRecord.consumedBlueTickets,
+              consumedRedTickets <= totalRedTickets + generalPoolRecord.consumedRedTickets else {
             return
         }
 
         restoreGeneralPoolConsumption()
-        totalBlueTickets -= sanitizedBlueTickets
-        totalRedTickets -= sanitizedRedTickets
+        totalBlueTickets -= consumedBlueTickets
+        totalRedTickets -= consumedRedTickets
 
         let updated = GeneralPoolRecord(
             blueTickets: sanitizedBlueTickets,
             redTickets: sanitizedRedTickets,
             upCount: max(0, upCount),
-            consumedBlueTickets: sanitizedBlueTickets,
-            consumedRedTickets: sanitizedRedTickets
+            consumedBlueTickets: consumedBlueTickets,
+            consumedRedTickets: consumedRedTickets
         )
         generalPoolRecord = updated
 
@@ -857,8 +870,8 @@ final class AppStateStore: ObservableObject {
                     timestamp: now,
                     source: generalPoolRecordSource,
                     value: RewardValue(
-                        blueTickets: -sanitizedBlueTickets,
-                        redTickets: -sanitizedRedTickets
+                        blueTickets: -consumedBlueTickets,
+                        redTickets: -consumedRedTickets
                     ),
                     claimKey: generalPoolRecordClaimKey,
                     amountTextOverride: generalPoolRecordAmountText(updated)

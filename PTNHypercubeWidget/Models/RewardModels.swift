@@ -35,7 +35,7 @@ struct RewardValue: Codable, Hashable {
     }
 
     // UI 顶部的“总抽数”按当前约定统计蓝票和红票，
-    // 与下方“今日折合晶数”的显示口径不同，后者统一换算成异方晶。
+    // 与下方收入统计不同，后者忽略红票。
     var drawEquivalent: Double {
         Double(crystals) / 180.0 + Double(blueTickets + redTickets)
     }
@@ -693,7 +693,7 @@ struct HistoryEntry: Identifiable, Codable, Hashable {
 
 extension RewardValue {
     var crystalEquivalent: Int {
-        crystals + (blueTickets + redTickets) * 180
+        crystals + blueTickets * 180
     }
 
     func crystalEquivalentDescription(withPlusSign: Bool) -> String {
