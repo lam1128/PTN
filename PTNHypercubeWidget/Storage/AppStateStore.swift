@@ -177,6 +177,7 @@ final class AppStateStore: ObservableObject {
             isPremiumPurchased: false,
             showsCycleAdvanceButton: RewardSchedule.anniversarySignInDefinition.showsCycleAdvanceButton
         )
+        migrateDarkZoneWeeklyHistory()
         migratePullPlanRecordHistorySources()
         ensurePullPlanRecordHistory()
         ensureGeneralPoolRecordHistory()
@@ -269,7 +270,8 @@ final class AppStateStore: ObservableObject {
             forKey: StorageKey.automaticStorageCalibrationVersion
         )
 
-        persist(notify: false)
+        let migratedDarkZoneHistory = migrateDarkZoneWeeklyHistory(persistChanges: false)
+        persist(notify: migratedDarkZoneHistory)
         refreshRewards()
         return true
     }
@@ -1315,6 +1317,71 @@ final class AppStateStore: ObservableObject {
         }
         history.removeAll { obsoleteIDs.contains($0.id) }
         persist()
+    }
+
+    @discardableResult
+    private func migrateDarkZoneWeeklyHistory(persistChanges: Bool = true) -> Bool {
+        var changed = false
+        var seenClaimKeys = Set<String>()
+        var migratedHistory: [HistoryEntry] = []
+
+        for entry in history {
+            guard let oldClaimKey = entry.claimKey,
+                  oldClaimKey.hasPrefix("dark-zone-"),
+                  oldClaimKey.contains("-week-"),
+                  entry.value == RewardSchedule.darkZoneWeeklyValue else {
+                migratedHistory.append(entry)
+                continue
+            }
+
+            let expectedClaimKey = rewardEngine.currentDarkZoneClaimKey(on: entry.timestamp)
+            guard seenClaimKeys.insert(expectedClaimKey).inserted else {
+                claimedRewardKeys.remove(oldClaimKey)
+                claimedRewardKeys.insert(expectedClaimKey)
+                revert(value: entry.value)
+                changed = true
+                continue
+            }
+
+            guard expectedClaimKey != oldClaimKey else {
+                migratedHistory.append(entry)
+                continue
+            }
+
+            claimedRewardKeys.remove(oldClaimKey)
+            claimedRewardKeys.insert(expectedClaimKey)
+            migratedHistory.append(
+                HistoryEntry(
+                    id: entry.id,
+                    timestamp: entry.timestamp,
+                    source: Self.darkZoneWeeklyTitle(for: expectedClaimKey) ?? entry.source,
+                    value: entry.value,
+                    claimKey: expectedClaimKey,
+                    amountTextOverride: entry.amountTextOverride
+                )
+            )
+            changed = true
+        }
+
+        guard changed else { return false }
+        history = migratedHistory
+        if persistChanges {
+            persist()
+        }
+        return true
+    }
+
+    private static func darkZoneWeeklyTitle(for claimKey: String) -> String? {
+        let components = claimKey.split(separator: "-")
+        guard components.count == 5,
+              components[0] == "dark",
+              components[1] == "zone",
+              components[3] == "week",
+              let season = Int(components[2]),
+              let week = Int(components[4]) else {
+            return nil
+        }
+        return "暗域·第\(season)期第\(week)周"
     }
 
     private static func loadHistory(from data: Data?) -> [HistoryEntry] {
