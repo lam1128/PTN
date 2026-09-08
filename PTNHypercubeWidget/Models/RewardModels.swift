@@ -353,6 +353,7 @@ struct DailyProgressSlotDefinition: Hashable {
     let showsCheckmark: Bool
     let unlockedBySlotIndex: Int?
     let shape: DailyProgressSlotShape?
+    let refreshesDaily: Bool
 
     init(
         id: String,
@@ -365,7 +366,8 @@ struct DailyProgressSlotDefinition: Hashable {
         completionBonus: RewardValue,
         showsCheckmark: Bool = false,
         unlockedBySlotIndex: Int? = nil,
-        shape: DailyProgressSlotShape? = nil
+        shape: DailyProgressSlotShape? = nil,
+        refreshesDaily: Bool = false
     ) {
         self.id = id
         self.value = value
@@ -378,6 +380,7 @@ struct DailyProgressSlotDefinition: Hashable {
         self.showsCheckmark = showsCheckmark
         self.unlockedBySlotIndex = unlockedBySlotIndex
         self.shape = shape
+        self.refreshesDaily = refreshesDaily
     }
 }
 

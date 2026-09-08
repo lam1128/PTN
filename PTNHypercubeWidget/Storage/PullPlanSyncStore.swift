@@ -5,7 +5,7 @@ import Foundation
 final class PullPlanSyncStore: ObservableObject {
     @Published private(set) var revision = 0
 
-    private static let successfulRefreshSlotKey = "ptn.s1nPullPlanSuccessfulRefreshSlot.v2"
+    private static let successfulRefreshSlotKey = "ptn.s1nPullPlanSuccessfulRefreshSlot.v3"
     private let defaults: UserDefaults
     private var lastAttemptAt: Date?
     private var isRefreshing = false
@@ -45,7 +45,7 @@ final class PullPlanSyncStore: ObservableObject {
                     revision += 1
                 }
 
-                let fetched = try await Self.fetchConfirmedBanners(at: now)
+                let fetched = try await Self.fetchBanners(at: now)
                 let existing = PullPlanBannerCache.load(defaults: defaults)
                 let known = RewardSchedule.pullPlanBanners
                 let knownIDs = Set(known.map(\.id))
@@ -94,12 +94,11 @@ final class PullPlanSyncStore: ObservableObject {
         }
     }
 
-    private nonisolated static func fetchConfirmedBanners(at now: Date) async throws -> [PullPlanBanner] {
+    private nonisolated static func fetchBanners(at now: Date) async throws -> [PullPlanBanner] {
         let formatter = ISO8601DateFormatter()
 
         let data = try await S1NSyncSupport.fetch(queryItems: [
             URLQueryItem(name: "type", value: "eq.banner"),
-            URLQueryItem(name: "confirmed", value: "eq.true"),
             URLQueryItem(name: "end", value: "gt.\(formatter.string(from: now))"),
             URLQueryItem(name: "select", value: "id,title,banner,start,end,confirmed"),
             URLQueryItem(name: "order", value: "start.asc")
@@ -113,8 +112,7 @@ final class PullPlanSyncStore: ObservableObject {
         from record: RemoteBanner,
         formatter: ISO8601DateFormatter
     ) -> PullPlanBanner? {
-        guard record.confirmed,
-              let start = formatter.date(from: record.start),
+        guard let start = formatter.date(from: record.start),
               let end = formatter.date(from: record.end),
               let mapping = bannerMapping(type: record.banner, title: record.title) else {
             return nil

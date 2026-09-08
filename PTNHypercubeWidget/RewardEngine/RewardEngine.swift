@@ -251,6 +251,13 @@ struct RewardEngine {
                 dailyCycleVersions: dailyCycleVersions
             )
         }
+        if let ashTideProgress = makeAshTideProgress(
+            now: currentDate,
+            claimedKeys: claimedKeys,
+            dailyCycleVersions: dailyCycleVersions
+        ) {
+            progresses.append(ashTideProgress)
+        }
         if let dataGapProgress = makeDataGapProgress(
             now: currentDate,
             claimedKeys: claimedKeys,
@@ -259,6 +266,41 @@ struct RewardEngine {
             progresses.append(dataGapProgress)
         }
         return progresses
+    }
+
+    private func makeAshTideProgress(
+        now: Date,
+        claimedKeys: Set<String>,
+        dailyCycleVersions: [String: Int]
+    ) -> DailyProgress? {
+        guard let window = RewardSchedule.currentAshTideWindow(at: now, calendar: calendar) else {
+            return nil
+        }
+
+        let thirdDay = calendar.date(
+            byAdding: .day,
+            value: 2,
+            to: calendar.startOfDay(for: window.start)
+        ) ?? window.start
+        let dailyUnlock = calendar.date(
+            bySettingHour: calendar.rewardRefreshHour,
+            minute: 0,
+            second: 0,
+            of: thirdDay
+        ) ?? thirdDay
+        var unlockedSlots: Set<Int> = [1, 2, 3]
+        if now >= dailyUnlock {
+            unlockedSlots.insert(4)
+        }
+
+        return makeProgress(
+            definition: RewardSchedule.ashTideDefinition,
+            cycleKey: window.cycleKey,
+            dailyCycleKey: DayStamp.rewardDay(from: now, calendar: calendar).key,
+            claimedKeys: claimedKeys,
+            dailyCycleVersions: dailyCycleVersions,
+            unlockedSlotIndices: unlockedSlots
+        )
     }
 
     private func makeDataGapProgress(
@@ -301,6 +343,7 @@ struct RewardEngine {
     private func makeProgress(
         definition: DailyProgressDefinition,
         cycleKey: String,
+        dailyCycleKey: String? = nil,
         claimedKeys: Set<String>,
         dailyCycleVersions: [String: Int],
         unlockedSlotIndices: Set<Int>? = nil,
@@ -308,7 +351,8 @@ struct RewardEngine {
     ) -> DailyProgress {
         let slots = definition.slots.enumerated().map { offset, slotDefinition in
             let index = offset + 1
-            let cycleID = "\(definition.id)-\(cycleKey)-\(slotDefinition.id)"
+            let slotCycleKey = slotDefinition.refreshesDaily ? (dailyCycleKey ?? cycleKey) : cycleKey
+            let cycleID = "\(definition.id)-\(slotCycleKey)-\(slotDefinition.id)"
             let cycleVersion = dailyCycleVersions[cycleID] ?? 0
             let versionSuffix = cycleVersion == 0 ? "" : "-v\(cycleVersion)"
             let claimPrefix = "\(cycleID)\(versionSuffix)"
@@ -321,7 +365,8 @@ struct RewardEngine {
             let prerequisiteKey = slotDefinition.unlockedBySlotIndex.flatMap { prerequisiteIndex -> String? in
                 guard definition.slots.indices.contains(prerequisiteIndex - 1) else { return nil }
                 let prerequisite = definition.slots[prerequisiteIndex - 1]
-                let prerequisiteID = "\(definition.id)-\(cycleKey)-\(prerequisite.id)"
+                let prerequisiteCycleKey = prerequisite.refreshesDaily ? (dailyCycleKey ?? cycleKey) : cycleKey
+                let prerequisiteID = "\(definition.id)-\(prerequisiteCycleKey)-\(prerequisite.id)"
                 let prerequisiteVersion = dailyCycleVersions[prerequisiteID] ?? 0
                 let prerequisiteSuffix = prerequisiteVersion == 0 ? "" : "-v\(prerequisiteVersion)"
                 return "\(prerequisiteID)\(prerequisiteSuffix)-1"

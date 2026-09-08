@@ -126,7 +126,7 @@ enum RewardSchedule {
         RewardSourceDefinition(
             id: "daily-emotion-detection",
             title: "情绪检测",
-            value: RewardValue(crystals: 20)
+            value: RewardValue(crystals: 30)
         ),
         RewardSourceDefinition(
             id: "regulatory-event",
@@ -377,6 +377,52 @@ enum RewardSchedule {
         ],
         display: .value,
         showsCycleAdvanceButton: false,
+        resetsDaily: false
+    )
+
+    static let ashTideDefinition = DailyProgressDefinition(
+        id: "ash-tide",
+        title: "灰烬之潮",
+        slots: [
+            DailyProgressSlotDefinition(
+                id: "apostle-core",
+                value: RewardValue(crystals: 150),
+                labels: ["150"],
+                historySources: ["灰烬之潮·使徒核心"],
+                maxCount: 1,
+                tint: .neutral,
+                completionBonus: .zero
+            ),
+            DailyProgressSlotDefinition(
+                id: "ash-apostle-1",
+                value: RewardValue(crystals: 115),
+                labels: ["115"],
+                historySources: ["灰烬之潮·灰烬之徒第1项"],
+                maxCount: 1,
+                tint: .neutral,
+                completionBonus: .zero
+            ),
+            DailyProgressSlotDefinition(
+                id: "ash-apostle-2",
+                value: RewardValue(crystals: 85),
+                labels: ["85"],
+                historySources: ["灰烬之潮·灰烬之徒第2项"],
+                maxCount: 1,
+                tint: .neutral,
+                completionBonus: .zero
+            ),
+            DailyProgressSlotDefinition(
+                id: "daily",
+                value: RewardValue(crystals: 35),
+                labels: ["35"],
+                historySources: ["灰烬之潮·灰烬之徒每日"],
+                maxCount: 1,
+                tint: .neutral,
+                completionBonus: .zero,
+                refreshesDaily: true
+            )
+        ],
+        display: .value,
         resetsDaily: false
     )
 
@@ -738,7 +784,12 @@ enum RewardSchedule {
         let bundledIdentities = Set(bundledBanners.map(\.syncIdentity))
         let bundledIDs = Set(bundledBanners.map(\.id))
         let bundledSourceIDs = Set(bundledBanners.compactMap(\.sourceID))
-        let appendedBanners = PullPlanBannerCache.load().filter {
+        let appendedBanners = PullPlanBannerCache.load().map { banner in
+            guard let sourceID = banner.sourceID, let override = overrides[sourceID] else {
+                return banner
+            }
+            return banner.applyingDateOverride(override)
+        }.filter {
             !bundledIDs.contains($0.id)
                 && !bundledSourceIDs.contains($0.sourceID ?? -1)
                 && !bundledIdentities.contains($0.syncIdentity)
@@ -783,6 +834,36 @@ enum RewardSchedule {
             return nil
         }
         return (first.startsAt(in: calendar), end)
+    }
+
+    // 灰烬之潮每三个复刻周期出现一次；同期开启的多个复刻池只计为一期。
+    static func currentAshTideWindow(
+        at date: Date,
+        calendar: Calendar = .rewardCalendar
+    ) -> (cycleKey: String, start: Date, end: Date)? {
+        let cycles = Dictionary(
+            grouping: pullPlanBanners.filter { $0.title == "复刻池" },
+            by: { $0.start.key }
+        )
+        .compactMap { cycleKey, banners -> (cycleKey: String, start: Date, end: Date, sourceIDs: Set<Int>)? in
+            guard let start = banners.map({ $0.startsAt(in: calendar) }).min(),
+                  let end = banners.map({ $0.endsAt(in: calendar) }).max() else {
+                return nil
+            }
+            return (cycleKey, start, end, Set(banners.compactMap(\.sourceID)))
+        }
+        .sorted { $0.start < $1.start }
+
+        let anchorSourceIDs: Set<Int> = [341, 342]
+        guard let anchorIndex = cycles.firstIndex(where: { !$0.sourceIDs.isDisjoint(with: anchorSourceIDs) }),
+              let activeIndex = cycles.firstIndex(where: { $0.start <= date && date < $0.end }),
+              activeIndex >= anchorIndex,
+              (activeIndex - anchorIndex).isMultiple(of: 3) else {
+            return nil
+        }
+
+        let cycle = cycles[activeIndex]
+        return (cycle.cycleKey, cycle.start, cycle.end)
     }
 
     private static func activityRerunCycleBanners(

@@ -1644,25 +1644,29 @@ private struct DailyProgressView: View {
     }
 
     private func slotButton(_ slot: DailyProgressSlot) -> some View {
-        Button {
+        let label = slot.showsCheckmark
+            ? nil
+            : progress.display == .value
+                ? slot.displayLabel ?? "\(slot.value.crystals)"
+                : "\(slot.isCompletionClaimed ? 0 : slot.count)"
+        let usesWideLayout = slot.shape == .capsule
+            || (slot.shape == nil && (label?.count ?? 0) > 2)
+
+        return Button {
             onTapSlot(slot)
         } label: {
             RewardCircle(
                 isFilled: slot.isDisplayedClaimed,
                 color: fillColor(for: slot),
                 unfilledColor: color(for: slot.tint),
-                label: slot.showsCheckmark
-                    ? nil
-                    : progress.display == .value
-                    ? slot.displayLabel ?? "\(slot.value.crystals)"
-                    : "\(slot.isCompletionClaimed ? 0 : slot.count)",
+                label: label,
                 shapeOverride: slot.shape
             )
         }
         .buttonStyle(.plain)
         .disabled(!slot.isUnlocked)
-        .frame(width: slot.shape == .capsule ? 42 : 24, height: 24)
-        .contentShape(slot.shape == .capsule ? AnyShape(Capsule()) : AnyShape(Circle()))
+        .frame(width: usesWideLayout ? 42 : 24, height: 24)
+        .contentShape(usesWideLayout ? AnyShape(Capsule()) : AnyShape(Circle()))
     }
 
     private func color(for tint: DailyProgressTint) -> Color {

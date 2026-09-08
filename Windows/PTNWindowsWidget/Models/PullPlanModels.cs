@@ -49,7 +49,10 @@ public static class PullPlanSchedule
         new("collective-owo-bianca-angell-cabernet", "统合池", new(2026, 10, 8), new(2026, 11, 5), ["OwO", "Bianca", "Angell", "Cabernet"], PullPlanSelectionKind.TargetChoice),
         new("directional-moore-lady-pearl", "定轨池", new(2026, 10, 15), new(2026, 11, 5), ["Moore", "Lady Pearl"], PullPlanSelectionKind.TargetChoice),
         new("routine-xiaofeng", "复刻池", new(2026, 10, 22), new(2026, 11, 5), ["Xiaofeng"]),
-        new("event-requiem", "限定池", new(2026, 11, 5), new(2026, 12, 3), ["Requiem"], PullPlanSelectionKind.LockCount),
-        new("event-famorene-eirene", "活动池", new(2026, 11, 5), new(2026, 12, 3), ["Famorene Eirene"])
+        new("event-requiem", "限定池", new(2026, 11, 5), new(2026, 12, 8), ["Requiem"], PullPlanSelectionKind.LockCount),
+        new("event-famorene-eirene", "活动池", new(2026, 11, 5), new(2026, 12, 8), ["Famorene Eirene"]),
+        new("s1n-banner-373", "定轨池", new(2026, 11, 19), new(2026, 12, 8), ["Necresta Hella", "Milly"], PullPlanSelectionKind.TargetChoice, 7, 0, 6, 59, "W. Europe Standard Time", "W. Europe Standard Time"),
+        new("s1n-banner-374", "复刻池", new(2026, 11, 26), new(2026, 12, 8), ["Clementine"], PullPlanSelectionKind.None, 7, 0, 6, 59, "W. Europe Standard Time", "W. Europe Standard Time"),
+        new("s1n-banner-375", "活动池", new(2026, 12, 8), new(2026, 12, 29), ["Daffodil"], PullPlanSelectionKind.None, 7, 0, 6, 59, "W. Europe Standard Time", "W. Europe Standard Time")
     ];
 }

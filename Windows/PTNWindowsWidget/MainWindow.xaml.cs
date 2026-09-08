@@ -89,7 +89,7 @@ public partial class MainWindow : Window
             AddReward("情绪检测·第15天", new RewardValue { BlueTickets = 1 }, $"emotion-day-15-{today:yyyy-MM-01}", "情绪检测·第15天");
 
         AddDarkZoneRewards(today);
-        AddReward("情绪检测", new RewardValue { Crystals = 20 }, $"daily-emotion-detection-{today:yyyy-MM-dd}", "情绪检测");
+        AddReward("情绪检测", new RewardValue { Crystals = 30 }, $"daily-emotion-detection-{today:yyyy-MM-dd}", "情绪检测");
         AddReward("监管事件", new RewardValue { Crystals = 20 }, $"regulatory-event-{today:yyyy-MM-dd}", "监管事件");
         AddEventTrialReward(today);
 
@@ -156,6 +156,28 @@ public partial class MainWindow : Window
         AddProgress("审查·狂级", new[] { 80, 80, 50, 80 }, "daily-review-daily-review-orange", "审查·狂级禁闭者");
         AddProgress("审查·危级", new[] { 60, 50, 60 }, "daily-review-daily-review-purple", "审查·危级禁闭者");
         AddProgress("服从度", new[] { 60, 30, 20, 10, 10, 5 }, "daily-obedience-daily-obedience", "服从度", new[] { "orange-0", "orange-40", "purple-0", "purple-40", "blue-0", "blue-40" });
+
+        var ashTide = CurrentAshTideRerun();
+        if (ashTide is not null)
+        {
+            var rewardDay = RewardDay(BerlinNow());
+            var cycleKey = ashTide.First().Start.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            var dailyUnlocked = BerlinNow() >= BannerDate(ashTide.First(), true).Date.AddDays(2).AddHours(4);
+            AddProgress(
+                "灰烬之潮",
+                new[] { 150, 115, 85, 35 },
+                $"ash-tide-{cycleKey}",
+                "灰烬之潮",
+                claimKeys: new[]
+                {
+                    $"ash-tide-{cycleKey}-apostle-core-1",
+                    $"ash-tide-{cycleKey}-ash-apostle-1-1",
+                    $"ash-tide-{cycleKey}-ash-apostle-2-1",
+                    $"ash-tide-{rewardDay:yyyy-MM-dd}-daily-1"
+                },
+                unlockedIndices: dailyUnlocked ? null : new[] { 0, 1, 2 }
+            );
+        }
 
         AddSectionHeader("N9 / N10 / 核心危机");
         AddProgress("N9", Enumerable.Repeat(70, 8).Concat(Enumerable.Repeat(35, 3)).Concat(Enumerable.Repeat(20, 3)).ToArray(), "n9-n9", "N9", Enumerable.Range(1, 14).Select(i => $"n9-{i}").ToArray());
@@ -690,7 +712,9 @@ public partial class MainWindow : Window
         string keyPrefix,
         string source,
         IReadOnlyList<string>? slotIds = null,
-        IReadOnlyList<int>? blueTicketIndices = null
+        IReadOnlyList<int>? blueTicketIndices = null,
+        IReadOnlyList<string>? claimKeys = null,
+        IReadOnlyList<int>? unlockedIndices = null
     )
     {
         var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 9) };
@@ -710,8 +734,15 @@ public partial class MainWindow : Window
                 ? new RewardValue { BlueTickets = 1 }
                 : new RewardValue { Crystals = values[index] };
             var slotID = slotIds?.ElementAtOrDefault(index) ?? (index + 1).ToString(CultureInfo.InvariantCulture);
-            var claimKey = slotIds is null ? $"{keyPrefix}-{index + 1}" : $"{keyPrefix}-{slotID}-1";
-            AddSmallReward(row, value, claimKey, $"{source}·第{index + 1}项");
+            var claimKey = claimKeys?.ElementAtOrDefault(index)
+                ?? (slotIds is null ? $"{keyPrefix}-{index + 1}" : $"{keyPrefix}-{slotID}-1");
+            AddSmallReward(
+                row,
+                value,
+                claimKey,
+                $"{source}·第{index + 1}项",
+                unlockedIndices?.Contains(index) ?? true
+            );
         }
         panel.Children.Add(row);
         activePanel.Children.Add(panel);
@@ -746,12 +777,19 @@ public partial class MainWindow : Window
         activePanel.Children.Add(button);
     }
 
-    private static void AddSmallReward(Panel parent, RewardValue value, string claimKey, string source)
+    private static void AddSmallReward(
+        Panel parent,
+        RewardValue value,
+        string claimKey,
+        string source,
+        bool isEnabled = true
+    )
     {
         var owner = new SmallRewardHost(claimKey, value, source);
         var button = new Button
         {
             Content = value.Display().Replace("晶", ""),
+            IsEnabled = isEnabled,
             Padding = new Thickness(8, 5, 8, 5),
             Margin = new Thickness(0, 0, 5, 5),
             FontSize = 10,
@@ -764,6 +802,24 @@ public partial class MainWindow : Window
             window?.ToggleReward(action.ClaimKey, action.Value, action.Source);
         };
         parent.Children.Add(button);
+    }
+
+    private static IReadOnlyList<PullPlanBanner>? CurrentAshTideRerun()
+    {
+        var cycles = PullPlanSchedule.Banners
+            .Where(banner => banner.Title == "复刻池")
+            .GroupBy(banner => banner.Start.Date)
+            .OrderBy(group => group.Min(banner => BannerInstant(banner, true)))
+            .Select(group => group.ToList())
+            .ToList();
+        var anchorIndex = cycles.FindIndex(cycle => cycle.Any(banner => banner.Id is "routine-rust" or "routine-margaret"));
+        var now = DateTimeOffset.UtcNow;
+        var activeIndex = cycles.FindIndex(cycle =>
+            cycle.Min(banner => BannerInstant(banner, true)) <= now
+            && now < cycle.Max(banner => BannerInstant(banner, false)));
+        return anchorIndex >= 0 && activeIndex >= anchorIndex && (activeIndex - anchorIndex) % 3 == 0
+            ? cycles[activeIndex]
+            : null;
     }
 
     private void AddNote(string text)
@@ -984,6 +1040,8 @@ public partial class MainWindow : Window
         var zone = TimeZoneInfo.FindSystemTimeZoneById("W. Europe Standard Time");
         return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zone);
     }
+
+    private static DateTime RewardDay(DateTime date) => date.Hour < 4 ? date.Date.AddDays(-1) : date.Date;
 
     private static DateTime MondayOf(DateTime date)
     {
