@@ -5,7 +5,7 @@ import Foundation
 final class PullPlanSyncStore: ObservableObject {
     @Published private(set) var revision = 0
 
-    private static let successfulRefreshSlotKey = "ptn.s1nPullPlanSuccessfulRefreshSlot.v3"
+    private static let successfulRefreshSlotKey = "ptn.s1nPullPlanSuccessfulRefreshSlot.v4"
     private let defaults: UserDefaults
     private var lastAttemptAt: Date?
     private var isRefreshing = false
@@ -16,7 +16,7 @@ final class PullPlanSyncStore: ObservableObject {
 
     func refreshIfNeeded(now: Date = Date()) {
         guard !isRefreshing,
-              let refreshSlot = S1NSyncSupport.refreshSlot(at: now),
+              let refreshSlot = S1NSyncSupport.pullPlanRefreshSlot(at: now),
               defaults.string(forKey: Self.successfulRefreshSlotKey) != refreshSlot else {
             return
         }
@@ -27,6 +27,7 @@ final class PullPlanSyncStore: ObservableObject {
 
         isRefreshing = true
         lastAttemptAt = now
+        defaults.set(refreshSlot, forKey: Self.successfulRefreshSlotKey)
 
         Task {
             defer { isRefreshing = false }
@@ -61,9 +62,8 @@ final class PullPlanSyncStore: ObservableObject {
                     PullPlanBannerCache.save(existing + additions, defaults: defaults)
                     revision += 1
                 }
-                defaults.set(refreshSlot, forKey: Self.successfulRefreshSlotKey)
             } catch {
-                // Existing local and cached banners remain available; retry later in this slot.
+                // Existing local and cached banners remain available until the next scheduled check.
             }
         }
     }
@@ -89,7 +89,12 @@ final class PullPlanSyncStore: ObservableObject {
             return PullPlanDateOverride(
                 sourceID: record.id,
                 start: DayStamp.from(start, calendar: calendar),
-                end: DayStamp.from(end, calendar: calendar)
+                end: DayStamp.from(end, calendar: calendar),
+                startHour: calendar.component(.hour, from: start),
+                startMinute: calendar.component(.minute, from: start),
+                endHour: calendar.component(.hour, from: end),
+                endMinute: calendar.component(.minute, from: end),
+                timeZoneIdentifier: calendar.timeZone.identifier
             )
         }
     }

@@ -177,6 +177,7 @@ final class AppStateStore: ObservableObject {
             isPremiumPurchased: false,
             showsCycleAdvanceButton: RewardSchedule.anniversarySignInDefinition.showsCycleAdvanceButton
         )
+        removeAssetNeutralRecordHistory()
         migrateDarkZoneWeeklyHistory()
         migratePullPlanRecordHistorySources()
         ensurePullPlanRecordHistory()
@@ -249,6 +250,7 @@ final class AppStateStore: ObservableObject {
         totalRedTickets = max(0, snapshot.totalRedTickets)
         claimedRewardKeys = Set(snapshot.claimedRewardKeys)
         history = snapshot.history
+        let removedAssetNeutralHistory = removeAssetNeutralRecordHistory(persistChanges: false)
         manualCycleVersions = snapshot.manualCycleVersions
         dailyCycleVersions = snapshot.dailyCycleVersions
         pullPlanBannerProgressRawValues = snapshot.pullPlanBannerProgressRawValues
@@ -271,7 +273,7 @@ final class AppStateStore: ObservableObject {
         )
 
         let migratedDarkZoneHistory = migrateDarkZoneWeeklyHistory(persistChanges: false)
-        persist(notify: migratedDarkZoneHistory)
+        persist(notify: migratedDarkZoneHistory || removedAssetNeutralHistory)
         refreshRewards()
         return true
     }
@@ -607,9 +609,20 @@ final class AppStateStore: ObservableObject {
         crystals: Int,
         now: Date = Date()
     ) {
-        guard crystals != 0 else { return }
+        recordManualAdjustment(
+            title: title,
+            value: RewardValue(crystals: crystals),
+            now: now
+        )
+    }
 
-        let value = RewardValue(crystals: crystals)
+    func recordManualAdjustment(
+        title: String,
+        value: RewardValue,
+        now: Date = Date()
+    ) {
+        guard !value.isZero else { return }
+
         apply(value: value)
         history.insert(
             HistoryEntry(
@@ -758,6 +771,31 @@ final class AppStateStore: ObservableObject {
         }
     }
 
+    func pullPlanRecordDetails(for poolTitle: String) -> [PullPlanRecordDetail] {
+        RewardSchedule.pullPlanBanners
+            .filter { $0.title == poolTitle }
+            .sorted { lhs, rhs in
+                if lhs.start != rhs.start { return lhs.start < rhs.start }
+                return lhs.id < rhs.id
+            }
+            .compactMap { banner in
+                let record = pullPlanTicketRecord(for: banner.id)
+                let nonUpCount = max(0, record.upTotal - record.upCount)
+                guard record.upCount > 0 || nonUpCount > 0 else { return nil }
+
+                return PullPlanRecordDetail(
+                    id: banner.id,
+                    dateText: banner.start.key,
+                    upCharacter: selectedPullPlanUpChoices[banner.id]
+                        ?? banner.characters.first
+                        ?? banner.title,
+                    upCount: record.upCount,
+                    nonUpCharacters: record.nonUpCharacters,
+                    nonUpCount: nonUpCount
+                )
+            }
+    }
+
     func availableBlueTicketsForPullPlanRecord(_ bannerID: String) -> Int {
         availablePullPlanTicketEquivalent(
             restoring: pullPlanTicketRecord(for: bannerID)
@@ -770,6 +808,7 @@ final class AppStateStore: ObservableObject {
         blueTickets: Int,
         upCount: Int,
         upTotal: Int,
+        nonUpCharacters: String,
         now: Date = Date()
     ) {
         let previous = pullPlanTicketRecord(for: bannerID)
@@ -780,7 +819,7 @@ final class AppStateStore: ObservableObject {
         let availableEquivalent = availablePullPlanTicketEquivalent(restoring: previous)
         guard inventoryTicketCost <= availableEquivalent else { return }
 
-        restorePullPlanConsumption(previous, bannerID: bannerID)
+        restorePullPlanConsumption(previous, bannerID: bannerID, removeHistory: false)
 
         let consumedBlueTickets = min(inventoryTicketCost, totalBlueTickets)
         let consumedCrystals = (inventoryTicketCost - consumedBlueTickets) * 180
@@ -798,33 +837,44 @@ final class AppStateStore: ObservableObject {
             blueTickets: sanitizedBlueTickets,
             upCount: max(0, upCount),
             upTotal: max(0, upTotal),
+            nonUpCharacters: nonUpCharacters.trimmingCharacters(in: .whitespacesAndNewlines),
             basePullCount: hasRecordValues ? initialPity + recordedTickets : 0,
             consumedBlueTickets: consumedBlueTickets,
             consumedCrystals: consumedCrystals
         )
+        let consumedValue = RewardValue(
+            crystals: -consumedCrystals,
+            blueTickets: -consumedBlueTickets
+        )
+        let consumptionChanged = consumedBlueTickets != previous.consumedBlueTickets
+            || consumedCrystals != previous.consumedCrystals
 
-        if updated == .empty {
+        if updated.isEmpty {
             pullPlanTicketRecords.removeValue(forKey: bannerID)
         } else {
             pullPlanTicketRecords[bannerID] = updated
-            let consumedValue = RewardValue(
-                crystals: -consumedCrystals,
-                blueTickets: -consumedBlueTickets
-            )
-            history.insert(
-                HistoryEntry(
-                    timestamp: now,
-                    source: pullPlanRecordSource(for: bannerID),
-                    value: consumedValue,
-                    claimKey: pullPlanRecordClaimKey(for: bannerID),
-                    amountTextOverride: pullPlanRecordAmountText(
-                        giftTickets: sanitizedGiftTickets,
-                        consumedBlueTickets: consumedBlueTickets,
-                        consumedCrystals: consumedCrystals
-                    )
-                ),
-                at: 0
-            )
+        }
+
+        let claimKey = pullPlanRecordClaimKey(for: bannerID)
+        if consumptionChanged {
+            history.removeAll { $0.claimKey == claimKey }
+            if !consumedValue.isZero {
+                history.insert(
+                    HistoryEntry(
+                        timestamp: now,
+                        source: pullPlanRecordSource(for: bannerID),
+                        value: consumedValue,
+                        claimKey: claimKey,
+                        amountTextOverride: pullPlanRecordAmountText(
+                            consumedBlueTickets: consumedBlueTickets,
+                            consumedCrystals: consumedCrystals
+                        )
+                    ),
+                    at: 0
+                )
+            }
+        } else {
+            history.removeAll { $0.claimKey == claimKey && $0.value.isZero }
         }
         persist()
         refreshRewards(now: now)
@@ -833,11 +883,12 @@ final class AppStateStore: ObservableObject {
     func setGeneralPoolRecord(
         blueTickets: Int,
         redTickets: Int,
-        upCount: Int,
+        upCharacters: String,
         now: Date = Date()
     ) {
         let sanitizedBlueTickets = max(0, blueTickets)
         let sanitizedRedTickets = max(0, redTickets)
+        let normalizedUpCharacters = GeneralPoolRecord.normalizedUpCharacters(upCharacters)
         let untrackedBlueTickets = max(
             0,
             generalPoolRecord.blueTickets - generalPoolRecord.consumedBlueTickets
@@ -853,30 +904,37 @@ final class AppStateStore: ObservableObject {
             return
         }
 
-        restoreGeneralPoolConsumption()
-        totalBlueTickets -= consumedBlueTickets
-        totalRedTickets -= consumedRedTickets
-
+        let previous = generalPoolRecord
         let updated = GeneralPoolRecord(
             blueTickets: sanitizedBlueTickets,
             redTickets: sanitizedRedTickets,
-            upCount: max(0, upCount),
+            upCount: GeneralPoolRecord.upCount(in: normalizedUpCharacters),
+            upCharacters: normalizedUpCharacters,
             consumedBlueTickets: consumedBlueTickets,
             consumedRedTickets: consumedRedTickets
         )
+        guard updated != previous else { return }
+
+        totalBlueTickets += previous.consumedBlueTickets
+        totalRedTickets += previous.consumedRedTickets
+        totalBlueTickets -= consumedBlueTickets
+        totalRedTickets -= consumedRedTickets
+
+        let adjustmentValue = RewardValue(
+            blueTickets: previous.consumedBlueTickets - consumedBlueTickets,
+            redTickets: previous.consumedRedTickets - consumedRedTickets
+        )
         generalPoolRecord = updated
 
-        if !updated.isEmpty {
+        if !adjustmentValue.isZero {
             history.insert(
                 HistoryEntry(
                     timestamp: now,
                     source: generalPoolRecordSource,
-                    value: RewardValue(
-                        blueTickets: -consumedBlueTickets,
-                        redTickets: -consumedRedTickets
-                    ),
+                    value: adjustmentValue,
                     claimKey: generalPoolRecordClaimKey,
-                    amountTextOverride: generalPoolRecordAmountText(updated)
+                    amountTextOverride: adjustmentValue.inlineDescription(withPlusSign: true),
+                    generalPoolRecordBeforeChange: previous
                 ),
                 at: 0
             )
@@ -900,7 +958,7 @@ final class AppStateStore: ObservableObject {
     }
 
     private func ensureGeneralPoolRecordHistory() {
-        guard !generalPoolRecord.isEmpty,
+        guard generalPoolRecord.consumedBlueTickets > 0 || generalPoolRecord.consumedRedTickets > 0,
               !history.contains(where: { $0.claimKey == generalPoolRecordClaimKey }) else {
             return
         }
@@ -941,21 +999,17 @@ final class AppStateStore: ObservableObject {
     }
 
     private func pullPlanRecordAmountText(
-        giftTickets: Int,
         consumedBlueTickets: Int,
         consumedCrystals: Int
     ) -> String {
         var components: [String] = []
-        if giftTickets > 0 {
-            components.append("-\(giftTickets)赠送票")
-        }
         if consumedBlueTickets > 0 {
             components.append("-\(consumedBlueTickets)蓝票")
         }
         if consumedCrystals > 0 {
             components.append("-\(consumedCrystals)晶")
         }
-        return components.isEmpty ? "已记录" : components.joined(separator: " · ")
+        return components.joined(separator: " · ")
     }
 
     private func pullPlanRecordSource(for bannerID: String) -> String {
@@ -998,7 +1052,8 @@ final class AppStateStore: ObservableObject {
 
     private func ensurePullPlanRecordHistory() {
         var changed = false
-        for (bannerID, record) in pullPlanTicketRecords where !record.isEmpty {
+        for (bannerID, record) in pullPlanTicketRecords
+        where record.consumedBlueTickets > 0 || record.consumedCrystals > 0 {
             let claimKey = pullPlanRecordClaimKey(for: bannerID)
             guard !history.contains(where: { $0.claimKey == claimKey }) else { continue }
 
@@ -1012,7 +1067,6 @@ final class AppStateStore: ObservableObject {
                     ),
                     claimKey: claimKey,
                     amountTextOverride: pullPlanRecordAmountText(
-                        giftTickets: record.giftTickets,
                         consumedBlueTickets: record.consumedBlueTickets,
                         consumedCrystals: record.consumedCrystals
                     )
@@ -1026,11 +1080,32 @@ final class AppStateStore: ObservableObject {
         }
     }
 
-    private func restorePullPlanConsumption(_ record: PullPlanTicketRecord, bannerID: String) {
+    private func restorePullPlanConsumption(
+        _ record: PullPlanTicketRecord,
+        bannerID: String,
+        removeHistory: Bool = true
+    ) {
         guard !record.isEmpty else { return }
         totalBlueTickets += record.consumedBlueTickets
         totalCrystals += record.consumedCrystals
-        history.removeAll { $0.claimKey == pullPlanRecordClaimKey(for: bannerID) }
+        if removeHistory {
+            history.removeAll { $0.claimKey == pullPlanRecordClaimKey(for: bannerID) }
+        }
+    }
+
+    @discardableResult
+    private func removeAssetNeutralRecordHistory(persistChanges: Bool = true) -> Bool {
+        let previousCount = history.count
+        history.removeAll { entry in
+            let isPullPlanRecord = entry.claimKey?.hasPrefix("pull-plan-record-") == true
+            let isGeneralPoolRecord = entry.claimKey == generalPoolRecordClaimKey
+            return (isPullPlanRecord || isGeneralPoolRecord) && entry.value.isZero
+        }
+        let didRemoveHistory = history.count != previousCount
+        if persistChanges && didRemoveHistory {
+            persist()
+        }
+        return didRemoveHistory
     }
 
     func setUsesExtraTranslucentBackground(_ usesExtraTranslucentBackground: Bool) {
@@ -1107,6 +1182,15 @@ final class AppStateStore: ObservableObject {
         }
 
         if history[index].claimKey == generalPoolRecordClaimKey {
+            if let previous = history[index].generalPoolRecordBeforeChange {
+                let latest = history.remove(at: index)
+                revert(value: latest.value)
+                generalPoolRecord = previous
+                persist()
+                refreshRewards(now: now)
+                return
+            }
+
             restoreGeneralPoolConsumption()
             generalPoolRecord = .empty
             persist()
@@ -1357,7 +1441,8 @@ final class AppStateStore: ObservableObject {
                     source: Self.darkZoneWeeklyTitle(for: expectedClaimKey) ?? entry.source,
                     value: entry.value,
                     claimKey: expectedClaimKey,
-                    amountTextOverride: entry.amountTextOverride
+                    amountTextOverride: entry.amountTextOverride,
+                    generalPoolRecordBeforeChange: entry.generalPoolRecordBeforeChange
                 )
             )
             changed = true
@@ -1404,7 +1489,8 @@ final class AppStateStore: ObservableObject {
                 source: migratedSource,
                 value: entry.value,
                 claimKey: entry.claimKey,
-                amountTextOverride: entry.amountTextOverride
+                amountTextOverride: entry.amountTextOverride,
+                generalPoolRecordBeforeChange: entry.generalPoolRecordBeforeChange
             )
         }
     }

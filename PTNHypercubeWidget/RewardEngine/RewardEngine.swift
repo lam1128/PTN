@@ -118,12 +118,12 @@ struct RewardEngine {
         for currentDate: Date,
         claimedKeys: Set<String>
     ) -> [RewardItem] {
-        guard let anchor = currentPermanentRewardAnchor(at: currentDate) else {
-            return []
-        }
-        let poolTitle = permanentRewardPoolTitle(for: anchor)
-
         return RewardSchedule.permanentRewardDefinitions.compactMap { definition in
+            let anchor = definition.timing == .maintenance
+                ? RewardSchedule.currentMaintenanceRewardAnchor(at: currentDate, calendar: calendar)
+                : currentPermanentRewardAnchor(at: currentDate)
+            guard let anchor else { return nil }
+
             guard let window = permanentRewardWindow(for: definition, anchor: anchor),
                   window.start <= currentDate,
                   currentDate < window.end else {
@@ -131,7 +131,7 @@ struct RewardEngine {
             }
 
             let claimKey = "permanent-reward-\(definition.id)-\(anchor.id)"
-            let title = "\(definition.title)·\(poolTitle)"
+            let title = "\(definition.title)·\(permanentRewardPoolTitle(for: anchor))"
             return makeRewardItem(
                 category: .unknownSchedule,
                 title: title,
@@ -183,12 +183,8 @@ struct RewardEngine {
 
         switch definition.timing {
         case .maintenance:
-            guard let start = calendar.date(
-                byAdding: .hour,
-                value: RewardSchedule.maintenanceStartOffsetHours,
-                to: anchorStart
-            ),
-            let end = calendar.date(
+            let start = RewardSchedule.maintenanceStartsAt(for: anchor, calendar: calendar)
+            guard let end = calendar.date(
                 byAdding: .day,
                 value: RewardSchedule.maintenanceWindowDays,
                 to: start

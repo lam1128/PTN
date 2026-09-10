@@ -59,6 +59,7 @@ final class GiftCodeStore: ObservableObject {
 
         isRefreshing = true
         lastAttemptAt = now
+        defaults.set(refreshSlot, forKey: Self.successfulRefreshSlotKey)
 
         Task {
             defer { isRefreshing = false }
@@ -66,9 +67,8 @@ final class GiftCodeStore: ObservableObject {
                 let fetchedCodes = try await Self.fetchActiveEnglishCodes(at: now)
                 codes = fetchedCodes
                 Self.save(fetchedCodes, to: defaults)
-                defaults.set(refreshSlot, forKey: Self.successfulRefreshSlotKey)
             } catch {
-                // Keep the last successful cache or bundled fallback when S1N is unavailable.
+                // Keep the last successful cache or bundled fallback until the next scheduled check.
             }
         }
     }

@@ -27,7 +27,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         snapshot = stateStore.Load() ?? new AppStateSnapshot();
-        if (ApplyAutomaticStorage())
+        var removedNeutralPullHistory = RemoveAssetNeutralRecordHistory();
+        if (ApplyAutomaticStorage() || removedNeutralPullHistory)
             stateStore.Save(snapshot, out _);
         externalChangeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         externalChangeTimer.Tick += (_, _) => ReloadIfChanged();
@@ -179,6 +180,8 @@ public partial class MainWindow : Window
             );
         }
 
+        AddMaintenanceReward();
+
         AddSectionHeader("N9 / N10 / 核心危机");
         AddProgress("N9", Enumerable.Repeat(70, 8).Concat(Enumerable.Repeat(35, 3)).Concat(Enumerable.Repeat(20, 3)).ToArray(), "n9-n9", "N9", Enumerable.Range(1, 14).Select(i => $"n9-{i}").ToArray());
         AddProgress("N10", Enumerable.Repeat(70, 8).Concat(Enumerable.Repeat(35, 3)).Concat(Enumerable.Repeat(20, 3)).ToArray(), "n10-n10", "N10", Enumerable.Range(1, 14).Select(i => $"n10-{i}").ToArray());
@@ -216,7 +219,7 @@ public partial class MainWindow : Window
             var total = records.Count == 0 ? 0 : records.Max(record => record.UpTotal);
             AddRecordSummary(title, draws, ups, total);
         }
-        AddRecordSummary("普池", GetGeneralPoolDrawCount(), snapshot.GeneralPoolRecord?.UpCount ?? 0, 0, isGeneral: true);
+        AddRecordSummary("普池", GetGeneralPoolDrawCount(), snapshot.GeneralPoolRecord?.DisplayedUpCount ?? 0, 0, isGeneral: true);
         AddNote("修改某个卡池的记录会先恢复旧记录消耗，再按照新记录重新扣除库存，避免重复扣票。");
     }
 
@@ -225,11 +228,48 @@ public partial class MainWindow : Window
         var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
         panel.Children.Add(new TextBlock { Text = title, FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = InkBrush });
         panel.Children.Add(new TextBlock { Text = $"抽数 {draws}  ·  UP数 {upCount}  ·  UP总数 {upTotal}", Margin = new Thickness(0, 3, 0, 5), Foreground = MutedBrush });
-        var button = new Button { Content = isGeneral ? "编辑普池记录" : "在抽卡规划中编辑具体池子", Padding = new Thickness(8, 4, 8, 4), HorizontalAlignment = HorizontalAlignment.Left };
+        var button = new Button { Content = isGeneral ? "编辑普池记录" : "查看UP / 非UP", Padding = new Thickness(8, 4, 8, 4), HorizontalAlignment = HorizontalAlignment.Left };
         if (isGeneral) button.Click += (_, _) => EditGeneralPoolRecord();
-        else button.Click += (_, _) => MainTabs.SelectedIndex = 2;
+        else button.Click += (_, _) => ShowPullPlanRecordDetails(title);
         panel.Children.Add(button);
         activePanel.Children.Add(panel);
+    }
+
+    private void ShowPullPlanRecordDetails(string poolTitle)
+    {
+        var lines = PullPlanSchedule.Banners
+            .Where(banner => banner.Title == poolTitle)
+            .OrderBy(banner => banner.Start)
+            .ThenBy(banner => banner.Id)
+            .Select(banner =>
+            {
+                var record = snapshot.PullPlanTicketRecords.GetValueOrDefault(banner.Id) ?? new PullPlanTicketRecord();
+                var nonUpCount = Math.Max(0, record.UpTotal - record.UpCount);
+                if (record.UpCount == 0 && nonUpCount == 0) return null;
+
+                var parts = new List<string>();
+                if (record.UpCount > 0)
+                {
+                    var character = snapshot.SelectedPullPlanUpChoices.GetValueOrDefault(
+                        banner.Id,
+                        banner.Characters.FirstOrDefault() ?? banner.Title
+                    );
+                    parts.Add($"UP：{character}{(record.UpCount > 1 ? $" ×{record.UpCount}" : "")}");
+                }
+                if (nonUpCount > 0)
+                    parts.Add($"非UP：{(string.IsNullOrWhiteSpace(record.NonUpCharacters) ? nonUpCount.ToString(CultureInfo.InvariantCulture) : record.NonUpCharacters)}");
+                return $"{banner.Start:yyyy-MM-dd}  {string.Join("  ", parts)}";
+            })
+            .Where(line => line is not null)
+            .ToList();
+
+        MessageBox.Show(
+            this,
+            lines.Count == 0 ? "暂无UP或非UP记录" : string.Join(Environment.NewLine, lines),
+            poolTitle,
+            MessageBoxButton.OK,
+            MessageBoxImage.Information
+        );
     }
 
     private int TotalPlannedUpCount()
@@ -539,6 +579,17 @@ public partial class MainWindow : Window
         if (upCount is null) return;
         var upTotal = PromptForInteger("抽卡记录", "UP 总数", old.UpTotal);
         if (upTotal is null) return;
+        var nonUpCharacters = old.NonUpCharacters;
+        if (Math.Max(0, upTotal.Value - upCount.Value) > 0)
+        {
+            var input = PromptForText("抽卡记录", "非UP角色（多个角色用顿号分隔）", old.NonUpCharacters);
+            if (input is null) return;
+            nonUpCharacters = input.Trim();
+        }
+        else
+        {
+            nonUpCharacters = "";
+        }
 
         var previous = old;
         var available = snapshot.TotalBlueTickets + snapshot.TotalCrystals / 180 + previous.ConsumedBlueTickets + previous.ConsumedCrystals / 180;
@@ -548,7 +599,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        RestorePullPlanConsumption(banner.Id, previous);
+        RestorePullPlanConsumption(banner.Id, previous, removeHistory: false);
         var consumedBlue = Math.Min(blueTickets.Value, snapshot.TotalBlueTickets);
         var consumedCrystals = (blueTickets.Value - consumedBlue) * 180;
         snapshot.TotalBlueTickets -= consumedBlue;
@@ -559,44 +610,48 @@ public partial class MainWindow : Window
             BlueTickets = Math.Max(0, blueTickets.Value),
             UpCount = Math.Max(0, upCount.Value),
             UpTotal = Math.Max(0, upTotal.Value),
+            NonUpCharacters = nonUpCharacters,
             BasePullCount = GetPity(banner.Id) + Math.Max(0, blueTickets.Value) + Math.Max(0, giftTickets.Value),
             ConsumedBlueTickets = consumedBlue,
             ConsumedCrystals = consumedCrystals
         };
         var key = $"pull-plan-record-{banner.Id}";
-        snapshot.History.RemoveAll(entry => entry.ClaimKey == key);
         if (updated.IsEmpty)
             snapshot.PullPlanTicketRecords.Remove(banner.Id);
         else
         {
             snapshot.PullPlanTicketRecords[banner.Id] = updated;
-            snapshot.History.Insert(0, new HistoryEntry
-            {
-                Timestamp = DateTimeOffset.UtcNow,
-                Source = $"抽卡记录·{snapshot.SelectedPullPlanUpChoices.GetValueOrDefault(banner.Id, banner.Characters.FirstOrDefault() ?? banner.Title)}",
-                Value = new RewardValue { BlueTickets = -consumedBlue, Crystals = -consumedCrystals },
-                ClaimKey = key,
-                AmountTextOverride = RecordAmountText(giftTickets.Value, consumedBlue, consumedCrystals)
-            });
         }
+        var consumedValue = new RewardValue { BlueTickets = -consumedBlue, Crystals = -consumedCrystals };
+        var consumptionChanged = consumedBlue != previous.ConsumedBlueTickets
+            || consumedCrystals != previous.ConsumedCrystals;
+        if (consumptionChanged)
+        {
+            snapshot.History.RemoveAll(entry => entry.ClaimKey == key);
+            if (!consumedValue.IsZero)
+            {
+                snapshot.History.Insert(0, new HistoryEntry
+                {
+                    Timestamp = DateTimeOffset.UtcNow,
+                    Source = $"抽卡记录·{snapshot.SelectedPullPlanUpChoices.GetValueOrDefault(banner.Id, banner.Characters.FirstOrDefault() ?? banner.Title)}",
+                    Value = consumedValue,
+                    ClaimKey = key,
+                    AmountTextOverride = consumedValue.Display()
+                });
+            }
+        }
+        else
+            snapshot.History.RemoveAll(entry => entry.ClaimKey == key && entry.Value.IsZero);
         SaveAndRefresh();
     }
 
-    private void RestorePullPlanConsumption(string bannerID, PullPlanTicketRecord record)
+    private void RestorePullPlanConsumption(string bannerID, PullPlanTicketRecord record, bool removeHistory = true)
     {
         if (record.IsEmpty) return;
         snapshot.TotalBlueTickets += record.ConsumedBlueTickets;
         snapshot.TotalCrystals += record.ConsumedCrystals;
-        snapshot.History.RemoveAll(entry => entry.ClaimKey == $"pull-plan-record-{bannerID}");
-    }
-
-    private static string RecordAmountText(int giftTickets, int blueTickets, int crystals)
-    {
-        var parts = new List<string>();
-        if (giftTickets > 0) parts.Add($"-{giftTickets}赠送票");
-        if (blueTickets > 0) parts.Add($"-{blueTickets}蓝票");
-        if (crystals > 0) parts.Add($"-{crystals}晶");
-        return parts.Count == 0 ? "已记录" : string.Join(" · ", parts);
+        if (removeHistory)
+            snapshot.History.RemoveAll(entry => entry.ClaimKey == $"pull-plan-record-{bannerID}");
     }
 
     private void EditGeneralPoolRecord()
@@ -606,8 +661,10 @@ public partial class MainWindow : Window
         if (blue is null) return;
         var red = PromptForInteger("普池记录", "红票", old.RedTickets);
         if (red is null) return;
-        var up = PromptForInteger("普池记录", "UP 数", old.UpCount);
-        if (up is null) return;
+        var upCharacters = PromptForText("普池记录", "UP（多个角色用逗号或空格分隔）", old.UpCharacters);
+        if (upCharacters is null) return;
+        var normalizedUpCharacters = string.Join(", ", upCharacters
+            .Split(new[] { ',', '，', ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         var availableBlue = snapshot.TotalBlueTickets + old.ConsumedBlueTickets;
         var availableRed = snapshot.TotalRedTickets + old.ConsumedRedTickets;
         if (blue.Value < 0 || blue.Value > availableBlue || red.Value < 0 || red.Value > availableRed)
@@ -615,29 +672,45 @@ public partial class MainWindow : Window
             MessageBox.Show(this, $"可用票不足。蓝票上限 {availableBlue}，红票上限 {availableRed}。", "普池记录", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        snapshot.TotalBlueTickets += old.ConsumedBlueTickets;
-        snapshot.TotalRedTickets += old.ConsumedRedTickets;
-        snapshot.History.RemoveAll(entry => entry.ClaimKey == "general-pool-record");
         var updated = new GeneralPoolRecord
         {
             BlueTickets = Math.Max(0, blue.Value),
             RedTickets = Math.Max(0, red.Value),
-            UpCount = Math.Max(0, up.Value),
+            UpCount = string.IsNullOrEmpty(normalizedUpCharacters)
+                ? 0
+                : normalizedUpCharacters.Split(',').Length,
+            UpCharacters = normalizedUpCharacters,
             ConsumedBlueTickets = Math.Max(0, blue.Value),
             ConsumedRedTickets = Math.Max(0, red.Value)
         };
+        if (updated.BlueTickets == old.BlueTickets
+            && updated.RedTickets == old.RedTickets
+            && updated.UpCount == old.UpCount
+            && updated.UpCharacters == old.UpCharacters
+            && updated.ConsumedBlueTickets == old.ConsumedBlueTickets
+            && updated.ConsumedRedTickets == old.ConsumedRedTickets)
+            return;
+
+        snapshot.TotalBlueTickets += old.ConsumedBlueTickets;
+        snapshot.TotalRedTickets += old.ConsumedRedTickets;
         snapshot.TotalBlueTickets -= updated.ConsumedBlueTickets;
         snapshot.TotalRedTickets -= updated.ConsumedRedTickets;
         snapshot.GeneralPoolRecord = updated.IsEmpty ? null : updated;
-        if (!updated.IsEmpty)
+        var adjustment = new RewardValue
+        {
+            BlueTickets = old.ConsumedBlueTickets - updated.ConsumedBlueTickets,
+            RedTickets = old.ConsumedRedTickets - updated.ConsumedRedTickets
+        };
+        if (!adjustment.IsZero)
         {
             snapshot.History.Insert(0, new HistoryEntry
             {
                 Timestamp = DateTimeOffset.UtcNow,
                 Source = "抽卡记录·普池",
-                Value = new RewardValue { BlueTickets = -updated.ConsumedBlueTickets, RedTickets = -updated.ConsumedRedTickets },
+                Value = adjustment,
                 ClaimKey = "general-pool-record",
-                AmountTextOverride = $"-{updated.ConsumedBlueTickets}蓝票 · -{updated.ConsumedRedTickets}红票"
+                AmountTextOverride = adjustment.Display(),
+                GeneralPoolRecordBeforeChange = old
             });
         }
         SaveAndRefresh();
@@ -678,6 +751,39 @@ public partial class MainWindow : Window
         dialog.ShowDialog();
         return result;
     }
+
+    private string? PromptForText(string title, string field, string value)
+    {
+        var dialog = new Window
+        {
+            Owner = this,
+            Title = title,
+            Width = 320,
+            Height = 155,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize
+        };
+        var layout = new StackPanel { Margin = new Thickness(16) };
+        layout.Children.Add(new TextBlock { Text = field, Margin = new Thickness(0, 0, 0, 6) });
+        var box = new TextBox { Text = value, Margin = new Thickness(0, 0, 0, 12) };
+        layout.Children.Add(box);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        string? result = null;
+        var cancel = new Button { Content = "取消", Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(0, 0, 6, 0) };
+        cancel.Click += (_, _) => dialog.Close();
+        var confirm = new Button { Content = "确认", Padding = new Thickness(10, 4, 10, 4) };
+        confirm.Click += (_, _) =>
+        {
+            result = box.Text;
+            dialog.Close();
+        };
+        buttons.Children.Add(cancel);
+        buttons.Children.Add(confirm);
+        layout.Children.Add(buttons);
+        dialog.Content = layout;
+        dialog.ShowDialog();
+        return result;
+    }
     private string TodayIncomeTextValue(DateTime today)
     {
         var total = snapshot.History
@@ -704,6 +810,26 @@ public partial class MainWindow : Window
             if (pastSeason == season || !snapshot.ClaimedRewardKeys.Contains(claimKey))
                 AddReward($"暗域·第{pastSeason}期赛季奖励", new RewardValue { Crystals = 450 }, claimKey, $"暗域·第{pastSeason}期赛季奖励");
         }
+    }
+
+    private void AddMaintenanceReward()
+    {
+        var now = BerlinNow();
+        var anchor = PullPlanSchedule.Banners
+            .Where(banner => banner.Title == "活动池" && banner.Start.Date.AddHours(11) <= now)
+            .OrderByDescending(banner => banner.Start)
+            .ThenByDescending(banner => banner.Id)
+            .FirstOrDefault();
+        if (anchor is null) return;
+
+        var start = anchor.Start.Date.AddHours(11);
+        if (now >= start.AddDays(7)) return;
+        AddReward(
+            $"停服维护·{anchor.Characters.FirstOrDefault() ?? anchor.Title}",
+            new RewardValue { Crystals = 200 },
+            $"permanent-reward-maintenance-compensation-{anchor.Id}",
+            $"停服维护·{anchor.Characters.FirstOrDefault() ?? anchor.Title}"
+        );
     }
 
     private void AddProgress(
@@ -957,6 +1083,21 @@ public partial class MainWindow : Window
             if (latest is null) return;
             if (latest.ClaimKey == "general-pool-record")
             {
+                if (latest.GeneralPoolRecordBeforeChange is not null)
+                {
+                    ApplyValue(new RewardValue
+                    {
+                        BlueTickets = -latest.Value.BlueTickets,
+                        RedTickets = -latest.Value.RedTickets
+                    });
+                    snapshot.GeneralPoolRecord = latest.GeneralPoolRecordBeforeChange.IsEmpty
+                        ? null
+                        : latest.GeneralPoolRecordBeforeChange;
+                    snapshot.History.Remove(latest);
+                    SaveAndRefresh();
+                    return;
+                }
+
                 var general = snapshot.GeneralPoolRecord;
                 if (general is not null)
                 {
@@ -1008,10 +1149,19 @@ public partial class MainWindow : Window
         var loaded = stateStore.Load();
         if (loaded is null) return;
         snapshot = loaded;
-        if (ApplyAutomaticStorage())
+        if (ApplyAutomaticStorage() || RemoveAssetNeutralRecordHistory())
             stateStore.Save(snapshot, out _);
         lastSeenFileWrite = writeTime;
         RefreshView();
+    }
+
+    private bool RemoveAssetNeutralRecordHistory()
+    {
+        return snapshot.History.RemoveAll(entry =>
+            (entry.ClaimKey?.StartsWith("pull-plan-record-", StringComparison.Ordinal) == true
+                || entry.ClaimKey == "general-pool-record")
+                && entry.Value.IsZero
+        ) > 0;
     }
 
     private void SaveAndRefresh()

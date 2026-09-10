@@ -627,7 +627,7 @@ enum RewardSchedule {
     static let questionnaireEndOffsetDays = 13
     static let questionnaireEndHour = 11
     static let questionnaireEndMinute = 59
-    static let maintenanceStartOffsetHours = 5
+    static let maintenanceStartHour = 11
     static let maintenanceWindowDays = 7
 
     // 抽卡规划按 s1n.gg/banners 当前可见卡池录入。
@@ -812,6 +812,37 @@ enum RewardSchedule {
                 if lhsStart != rhsStart { return lhsStart < rhsStart }
                 return lhs.id < rhs.id
             }
+    }
+
+    static func currentMaintenanceRewardAnchor(
+        at date: Date,
+        calendar: Calendar = .rewardCalendar
+    ) -> PullPlanBanner? {
+        pullPlanBanners
+            .filter {
+                $0.title == activityPoolTitle
+                    && maintenanceStartsAt(for: $0, calendar: calendar) <= date
+            }
+            .max { lhs, rhs in
+                let lhsStart = maintenanceStartsAt(for: lhs, calendar: calendar)
+                let rhsStart = maintenanceStartsAt(for: rhs, calendar: calendar)
+                if lhsStart != rhsStart { return lhsStart < rhsStart }
+                return lhs.id < rhs.id
+            }
+    }
+
+    static func maintenanceStartsAt(
+        for banner: PullPlanBanner,
+        calendar: Calendar = .rewardCalendar
+    ) -> Date {
+        var berlinCalendar = calendar
+        berlinCalendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        return berlinCalendar.date(from: DateComponents(
+            year: banner.start.year,
+            month: banner.start.month,
+            day: banner.start.day,
+            hour: maintenanceStartHour
+        )) ?? banner.start.date(in: berlinCalendar)
     }
 
     // 同一开始日期的复刻池共用一个奖励周期，下一组复刻池开始时自动换周期。
@@ -999,7 +1030,12 @@ enum RewardSchedule {
     }
 
     static func eventTrialValue(for banners: [PullPlanBanner]) -> RewardValue {
-        RewardValue(
+        let bannerIDSet = Set(banners.map(\.id))
+        if bannerIDSet == ["event-chengxiao"] {
+            return RewardValue(crystals: 30)
+        }
+
+        return RewardValue(
             crystals: banners.count * eventTrialBaseCrystalsPerBanner + eventTrialBonusCrystals
         )
     }

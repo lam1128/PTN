@@ -152,6 +152,8 @@ struct MainWidgetView: View {
     @State private var permanentRewardsScrollOffset: CGFloat = 0
     @State private var pullPlanScrollOffset: CGFloat = 0
     @State private var pullPlanRecordScrollOffset: CGFloat = 0
+    @AppStorage("ptn.lastConsumptionAdjustmentSource") private var lastConsumptionAdjustmentSource = ""
+    @AppStorage("ptn.lastIncreaseAdjustmentSource") private var lastIncreaseAdjustmentSource = ""
     private let refreshTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
     private let upPopupWidth: CGFloat = 150
     private let giftCodePopupWidth: CGFloat = 260
@@ -755,7 +757,9 @@ struct MainWidgetView: View {
     private var pullPlanRecordSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(store.pullPlanRecordSummaries) { summary in
-                PullPlanRecordSummaryRow(summary: summary)
+                PullPlanRecordSummaryRow(summary: summary) {
+                    activeSheet = .pullPlanRecordDetails(summary.id)
+                }
             }
 
             GeneralPoolRecordRow(record: store.generalPoolRecord) {
@@ -1065,6 +1069,7 @@ struct MainWidgetView: View {
             WidgetPopupContainer {
                 CrystalAdjustmentSheet(
                     title: "消耗",
+                    initialSource: lastConsumptionAdjustmentSource,
                     progressContent: {
                         SecretPassProgressView(
                             progress: store.photoExchangeProgress,
@@ -1080,6 +1085,7 @@ struct MainWidgetView: View {
                         )
                     },
                     onSave: { title, crystals in
+                        lastConsumptionAdjustmentSource = title
                         store.recordManualCrystalAdjustment(
                             title: "消耗·\(title)",
                             crystals: -crystals
@@ -1092,13 +1098,13 @@ struct MainWidgetView: View {
             .frame(width: 310)
         case .increase:
             WidgetPopupContainer {
-                CrystalAdjustmentSheet(
-                    title: "增加",
-                    progressContent: { EmptyView() },
-                    onSave: { title, crystals in
-                        store.recordManualCrystalAdjustment(
+                InventoryIncreaseSheet(
+                    initialSource: lastIncreaseAdjustmentSource,
+                    onSave: { title, value in
+                        lastIncreaseAdjustmentSource = title
+                        store.recordManualAdjustment(
                             title: "增加·\(title)",
-                            crystals: crystals
+                            value: value
                         )
                         activeSheet = nil
                     },
@@ -1115,14 +1121,16 @@ struct MainWidgetView: View {
                     currentBlueTickets: record.blueTickets,
                     availableBlueTickets: store.availableBlueTicketsForPullPlanRecord(bannerID),
                     currentUpCount: record.upCount,
-                    currentUpTotal: record.upTotal
-                ) { giftTickets, blueTickets, upCount, upTotal in
+                    currentUpTotal: record.upTotal,
+                    currentNonUpCharacters: record.nonUpCharacters
+                ) { giftTickets, blueTickets, upCount, upTotal, nonUpCharacters in
                     store.setPullPlanTicketRecord(
                         for: bannerID,
                         giftTickets: giftTickets,
                         blueTickets: blueTickets,
                         upCount: upCount,
-                        upTotal: upTotal
+                        upTotal: upTotal,
+                        nonUpCharacters: nonUpCharacters
                     )
                     activeSheet = nil
                 } onClose: {
@@ -1130,15 +1138,24 @@ struct MainWidgetView: View {
                 }
             }
             .frame(width: 286)
+        case .pullPlanRecordDetails(let poolTitle):
+            WidgetPopupContainer {
+                PullPlanRecordDetailsSheet(
+                    poolTitle: poolTitle,
+                    details: store.pullPlanRecordDetails(for: poolTitle),
+                    onClose: { activeSheet = nil }
+                )
+            }
+            .frame(width: 310, height: 270)
         case .generalPoolRecord:
             WidgetPopupContainer {
                 GeneralPoolRecordSheet(
                     currentRecord: store.generalPoolRecord,
-                    onSave: { blueTickets, redTickets, upCount in
+                    onSave: { blueTickets, redTickets, upCharacters in
                         store.setGeneralPoolRecord(
                             blueTickets: blueTickets,
                             redTickets: redTickets,
-                            upCount: upCount
+                            upCharacters: upCharacters
                         )
                         activeSheet = nil
                     },
@@ -2086,26 +2103,30 @@ private struct PullPlanPityField: View {
 
 private struct PullPlanRecordSummaryRow: View {
     let summary: PullPlanRecordSummary
+    let onOpenDetails: () -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(summary.title)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(WidgetPalette.titlePrimary)
-                .lineLimit(1)
+        Button(action: onOpenDetails) {
+            HStack(spacing: 6) {
+                Text(summary.title)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(WidgetPalette.titlePrimary)
+                    .lineLimit(1)
 
-            Spacer(minLength: 8)
+                Spacer(minLength: 8)
 
-            HStack(spacing: 8) {
-                PullPlanRecordMetric(title: "抽数", value: summary.drawCount)
-                PullPlanRecordMetric(title: "UP数", value: summary.upCount)
-                PullPlanRecordMetric(title: "UP总数", value: summary.upTotal)
+                HStack(spacing: 8) {
+                    PullPlanRecordMetric(title: "抽数", value: summary.drawCount)
+                    PullPlanRecordMetric(title: "UP数", value: summary.upCount)
+                    PullPlanRecordMetric(title: "UP总数", value: summary.upTotal)
+                }
+                .fixedSize(horizontal: true, vertical: false)
             }
-            .fixedSize(horizontal: true, vertical: false)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(11)
+            .widgetRoundedCard(fill: Color.white.opacity(0.18))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(11)
-        .widgetRoundedCard(fill: Color.white.opacity(0.18))
+        .buttonStyle(.plain)
     }
 }
 
@@ -2125,7 +2146,7 @@ private struct GeneralPoolRecordRow: View {
                 HStack(spacing: 8) {
                     PullPlanRecordMetric(title: "蓝票", value: record.blueTickets)
                     PullPlanRecordMetric(title: "红票", value: record.redTickets)
-                    PullPlanRecordMetric(title: "UP数", value: record.upCount)
+                    PullPlanRecordMetric(title: "UP数", value: record.displayedUpCount)
                 }
                 .fixedSize(horizontal: true, vertical: false)
             }
@@ -2278,6 +2299,7 @@ private enum ActiveSheet: Identifiable, Equatable {
     case consumption
     case increase
     case pullPlanRecord(String)
+    case pullPlanRecordDetails(String)
     case generalPoolRecord
 
     var id: String {
@@ -2288,6 +2310,7 @@ private enum ActiveSheet: Identifiable, Equatable {
         case .consumption: return "consumption"
         case .increase: return "increase"
         case .pullPlanRecord(let bannerID): return "pull-plan-record-\(bannerID)"
+        case .pullPlanRecordDetails(let poolTitle): return "pull-plan-record-details-\(poolTitle)"
         case .generalPoolRecord: return "general-pool-record"
         }
     }

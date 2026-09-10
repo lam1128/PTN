@@ -177,6 +177,7 @@ struct PullPlanTicketRecord: Codable, Hashable {
     let blueTickets: Int
     let upCount: Int
     let upTotal: Int
+    let nonUpCharacters: String
     let basePullCount: Int
     let consumedBlueTickets: Int
     let consumedCrystals: Int
@@ -186,6 +187,7 @@ struct PullPlanTicketRecord: Codable, Hashable {
         blueTickets: 0,
         upCount: 0,
         upTotal: 0,
+        nonUpCharacters: "",
         basePullCount: 0,
         consumedBlueTickets: 0,
         consumedCrystals: 0
@@ -200,6 +202,7 @@ struct PullPlanTicketRecord: Codable, Hashable {
         blueTickets: Int,
         upCount: Int = 0,
         upTotal: Int = 0,
+        nonUpCharacters: String = "",
         basePullCount: Int = 0,
         consumedBlueTickets: Int? = nil,
         consumedCrystals: Int = 0
@@ -208,6 +211,7 @@ struct PullPlanTicketRecord: Codable, Hashable {
         self.blueTickets = blueTickets
         self.upCount = upCount
         self.upTotal = upTotal
+        self.nonUpCharacters = nonUpCharacters
         self.basePullCount = basePullCount
         self.consumedBlueTickets = consumedBlueTickets ?? blueTickets
         self.consumedCrystals = consumedCrystals
@@ -218,6 +222,7 @@ struct PullPlanTicketRecord: Codable, Hashable {
         case blueTickets
         case upCount
         case upTotal
+        case nonUpCharacters
         case basePullCount
         case consumedBlueTickets
         case consumedCrystals
@@ -230,6 +235,7 @@ struct PullPlanTicketRecord: Codable, Hashable {
             blueTickets: try container.decodeIfPresent(Int.self, forKey: .blueTickets) ?? 0,
             upCount: try container.decodeIfPresent(Int.self, forKey: .upCount) ?? 0,
             upTotal: try container.decodeIfPresent(Int.self, forKey: .upTotal) ?? 0,
+            nonUpCharacters: try container.decodeIfPresent(String.self, forKey: .nonUpCharacters) ?? "",
             basePullCount: try container.decodeIfPresent(Int.self, forKey: .basePullCount) ?? 0,
             consumedBlueTickets: try container.decodeIfPresent(Int.self, forKey: .consumedBlueTickets),
             consumedCrystals: try container.decodeIfPresent(Int.self, forKey: .consumedCrystals) ?? 0
@@ -245,10 +251,20 @@ struct PullPlanRecordSummary: Identifiable, Hashable {
     let upTotal: Int
 }
 
+struct PullPlanRecordDetail: Identifiable, Hashable {
+    let id: String
+    let dateText: String
+    let upCharacter: String
+    let upCount: Int
+    let nonUpCharacters: String
+    let nonUpCount: Int
+}
+
 struct GeneralPoolRecord: Codable, Hashable {
     let blueTickets: Int
     let redTickets: Int
     let upCount: Int
+    let upCharacters: String
     let consumedBlueTickets: Int
     let consumedRedTickets: Int
 
@@ -256,24 +272,31 @@ struct GeneralPoolRecord: Codable, Hashable {
         blueTickets: 0,
         redTickets: 0,
         upCount: 0,
+        upCharacters: "",
         consumedBlueTickets: 0,
         consumedRedTickets: 0
     )
 
     var isEmpty: Bool {
-        blueTickets == 0 && redTickets == 0 && upCount == 0
+        blueTickets == 0 && redTickets == 0 && displayedUpCount == 0
+    }
+
+    var displayedUpCount: Int {
+        upCharacters.isEmpty ? upCount : Self.upCount(in: upCharacters)
     }
 
     init(
         blueTickets: Int,
         redTickets: Int,
         upCount: Int,
+        upCharacters: String = "",
         consumedBlueTickets: Int? = nil,
         consumedRedTickets: Int? = nil
     ) {
         self.blueTickets = blueTickets
         self.redTickets = redTickets
         self.upCount = upCount
+        self.upCharacters = upCharacters
         self.consumedBlueTickets = consumedBlueTickets ?? blueTickets
         self.consumedRedTickets = consumedRedTickets ?? redTickets
     }
@@ -282,6 +305,7 @@ struct GeneralPoolRecord: Codable, Hashable {
         case blueTickets
         case redTickets
         case upCount
+        case upCharacters
         case consumedBlueTickets
         case consumedRedTickets
     }
@@ -292,9 +316,28 @@ struct GeneralPoolRecord: Codable, Hashable {
             blueTickets: try container.decodeIfPresent(Int.self, forKey: .blueTickets) ?? 0,
             redTickets: try container.decodeIfPresent(Int.self, forKey: .redTickets) ?? 0,
             upCount: try container.decodeIfPresent(Int.self, forKey: .upCount) ?? 0,
+            upCharacters: try container.decodeIfPresent(String.self, forKey: .upCharacters) ?? "",
             consumedBlueTickets: try container.decodeIfPresent(Int.self, forKey: .consumedBlueTickets) ?? 0,
             consumedRedTickets: try container.decodeIfPresent(Int.self, forKey: .consumedRedTickets) ?? 0
         )
+    }
+
+    static func normalizedUpCharacters(_ value: String) -> String {
+        upCharacterNames(in: value).joined(separator: ", ")
+    }
+
+    static func upCount(in value: String) -> Int {
+        upCharacterNames(in: value).count
+    }
+
+    private static func upCharacterNames(in value: String) -> [String] {
+        value
+            .components(
+                separatedBy: CharacterSet(charactersIn: ",，")
+                    .union(.whitespacesAndNewlines)
+            )
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 }
 
@@ -519,12 +562,12 @@ struct PullPlanBanner: Identifiable, Codable, Hashable {
             title: title,
             start: override.start,
             end: override.end,
-            startHour: startHour,
-            startMinute: startMinute,
-            endHour: endHour,
-            endMinute: endMinute,
-            timeZoneIdentifier: timeZoneIdentifier,
-            endTimeZoneIdentifier: endTimeZoneIdentifier,
+            startHour: override.startHour ?? startHour,
+            startMinute: override.startMinute ?? startMinute,
+            endHour: override.endHour ?? endHour,
+            endMinute: override.endMinute ?? endMinute,
+            timeZoneIdentifier: override.timeZoneIdentifier ?? timeZoneIdentifier,
+            endTimeZoneIdentifier: override.timeZoneIdentifier ?? endTimeZoneIdentifier,
             characters: characters,
             selectionKind: selectionKind
         )
@@ -672,6 +715,7 @@ struct HistoryEntry: Identifiable, Codable, Hashable {
     let value: RewardValue
     let claimKey: String?
     let amountTextOverride: String?
+    let generalPoolRecordBeforeChange: GeneralPoolRecord?
 
     init(
         id: UUID = UUID(),
@@ -679,7 +723,8 @@ struct HistoryEntry: Identifiable, Codable, Hashable {
         source: String,
         value: RewardValue,
         claimKey: String?,
-        amountTextOverride: String? = nil
+        amountTextOverride: String? = nil,
+        generalPoolRecordBeforeChange: GeneralPoolRecord? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -687,6 +732,7 @@ struct HistoryEntry: Identifiable, Codable, Hashable {
         self.value = value
         self.claimKey = claimKey
         self.amountTextOverride = amountTextOverride
+        self.generalPoolRecordBeforeChange = generalPoolRecordBeforeChange
     }
 
     var amountText: String {

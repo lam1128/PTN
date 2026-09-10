@@ -14,16 +14,30 @@ enum S1NSyncSupport {
     }
 
     static func refreshSlot(at date: Date) -> String? {
+        refreshSlot(at: date, dailyTimes: [(8, 0), (16, 0)])
+    }
+
+    static func pullPlanRefreshSlot(at date: Date) -> String? {
+        refreshSlot(at: date, dailyTimes: [(12, 50), (13, 10)])
+    }
+
+    private static func refreshSlot(
+        at date: Date,
+        dailyTimes: [(hour: Int, minute: Int)]
+    ) -> String? {
         let calendar = berlinCalendar
-        let hour = calendar.component(.hour, from: date)
-        guard let slotHour = [8, 16].last(where: { hour >= $0 }) else { return nil }
-        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        let currentMinute = (components.hour ?? 0) * 60 + (components.minute ?? 0)
+        guard let slot = dailyTimes.last(where: { currentMinute >= $0.hour * 60 + $0.minute }) else {
+            return nil
+        }
         return String(
-            format: "%04d-%02d-%02d-%02d",
+            format: "%04d-%02d-%02d-%02d%02d",
             components.year ?? 0,
             components.month ?? 0,
             components.day ?? 0,
-            slotHour
+            slot.hour,
+            slot.minute
         )
     }
 
@@ -51,6 +65,11 @@ struct PullPlanDateOverride: Codable, Hashable {
     let sourceID: Int
     let start: DayStamp
     let end: DayStamp
+    let startHour: Int?
+    let startMinute: Int?
+    let endHour: Int?
+    let endMinute: Int?
+    let timeZoneIdentifier: String?
 }
 
 enum PullPlanDateOverrideCache {

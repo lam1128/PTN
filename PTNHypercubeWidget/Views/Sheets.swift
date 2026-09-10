@@ -113,13 +113,15 @@ struct PullPlanTicketRecordSheet: View {
     let availableBlueTickets: Int
     let currentUpCount: Int
     let currentUpTotal: Int
-    let onSave: (Int, Int, Int, Int) -> Void
+    let currentNonUpCharacters: String
+    let onSave: (Int, Int, Int, Int, String) -> Void
     let onClose: () -> Void
 
     @State private var giftTicketDraft: String
     @State private var blueTicketDraft: String
     @State private var upCountDraft: String
     @State private var upTotalDraft: String
+    @State private var nonUpCharactersDraft: String
     @State private var upTotalManuallyEdited: Bool
 
     init(
@@ -129,7 +131,8 @@ struct PullPlanTicketRecordSheet: View {
         availableBlueTickets: Int,
         currentUpCount: Int,
         currentUpTotal: Int,
-        onSave: @escaping (Int, Int, Int, Int) -> Void,
+        currentNonUpCharacters: String,
+        onSave: @escaping (Int, Int, Int, Int, String) -> Void,
         onClose: @escaping () -> Void
     ) {
         self.bannerTitle = bannerTitle
@@ -138,12 +141,14 @@ struct PullPlanTicketRecordSheet: View {
         self.availableBlueTickets = availableBlueTickets
         self.currentUpCount = currentUpCount
         self.currentUpTotal = currentUpTotal
+        self.currentNonUpCharacters = currentNonUpCharacters
         self.onSave = onSave
         self.onClose = onClose
         _giftTicketDraft = State(initialValue: currentGiftTickets == 0 ? "" : String(currentGiftTickets))
         _blueTicketDraft = State(initialValue: currentBlueTickets == 0 ? "" : String(currentBlueTickets))
         _upCountDraft = State(initialValue: currentUpCount == 0 ? "" : String(currentUpCount))
         _upTotalDraft = State(initialValue: currentUpTotal == 0 ? "" : String(currentUpTotal))
+        _nonUpCharactersDraft = State(initialValue: currentNonUpCharacters)
         _upTotalManuallyEdited = State(initialValue: currentUpTotal != currentUpCount)
     }
 
@@ -163,6 +168,10 @@ struct PullPlanTicketRecordSheet: View {
         Int(upTotalDraft) ?? 0
     }
 
+    private var nonUpCount: Int {
+        max(0, upTotal - upCount)
+    }
+
     private var isValid: Bool {
         blueTickets >= 0 && blueTickets <= availableBlueTickets
     }
@@ -171,11 +180,12 @@ struct PullPlanTicketRecordSheet: View {
         giftTickets != currentGiftTickets ||
             blueTickets != currentBlueTickets ||
             upCount != currentUpCount ||
-            upTotal != currentUpTotal
+            upTotal != currentUpTotal ||
+            normalizedNonUpCharacters != currentNonUpCharacters
     }
 
     private var canConfirm: Bool {
-        isValid
+        isValid && (nonUpCount == 0 || !normalizedNonUpCharacters.isEmpty)
     }
 
     var body: some View {
@@ -190,6 +200,18 @@ struct PullPlanTicketRecordSheet: View {
             HStack(spacing: 10) {
                 RecordNumberField(title: "UP数", text: $upCountDraft, onSubmit: submit)
                 RecordNumberField(title: "UP总数", text: upTotalEditingBinding, onSubmit: submit)
+            }
+
+            if nonUpCount > 0 {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("非UP角色")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(WidgetPalette.titlePrimary)
+
+                    TextField("多个角色用顿号分隔", text: $nonUpCharactersDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit(submit)
+                }
             }
 
             HStack {
@@ -232,12 +254,18 @@ struct PullPlanTicketRecordSheet: View {
     }
 
     private func submit() {
-        guard isValid else { return }
+        guard canConfirm else { return }
         if hasChanges {
-            onSave(giftTickets, blueTickets, upCount, upTotal)
+            onSave(giftTickets, blueTickets, upCount, upTotal, normalizedNonUpCharacters)
         } else {
             onClose()
         }
+    }
+
+    private var normalizedNonUpCharacters: String {
+        nonUpCount > 0
+            ? nonUpCharactersDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            : ""
     }
 
     private func filteredNumber(_ value: String) -> String {
@@ -245,18 +273,84 @@ struct PullPlanTicketRecordSheet: View {
     }
 }
 
+struct PullPlanRecordDetailsSheet: View {
+    let poolTitle: String
+    let details: [PullPlanRecordDetail]
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            panelHeader(poolTitle, onClose: onClose)
+
+            if details.isEmpty {
+                Text("暂无UP或非UP记录")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(WidgetPalette.mutedText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(details) { detail in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(detail.dateText)
+                                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                                    .foregroundStyle(WidgetPalette.mutedText)
+
+                                HStack(spacing: 10) {
+                                    if detail.upCount > 0 {
+                                        Text(upText(for: detail))
+                                    }
+                                    if detail.nonUpCount > 0 {
+                                        Text(nonUpText(for: detail))
+                                    }
+                                }
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(WidgetPalette.titlePrimary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(Color.white.opacity(0.18))
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.34), lineWidth: 1)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(16)
+    }
+
+    private func upText(for detail: PullPlanRecordDetail) -> String {
+        let count = detail.upCount > 1 ? " ×\(detail.upCount)" : ""
+        return "UP：\(detail.upCharacter)\(count)"
+    }
+
+    private func nonUpText(for detail: PullPlanRecordDetail) -> String {
+        let characters = detail.nonUpCharacters.isEmpty
+            ? "\(detail.nonUpCount)"
+            : detail.nonUpCharacters
+        return "非UP：\(characters)"
+    }
+}
+
 struct GeneralPoolRecordSheet: View {
     let currentRecord: GeneralPoolRecord
-    let onSave: (Int, Int, Int) -> Void
+    let onSave: (Int, Int, String) -> Void
     let onClose: () -> Void
 
     @State private var blueTicketDraft: String
     @State private var redTicketDraft: String
-    @State private var upCountDraft: String
+    @State private var upCharactersDraft: String
 
     init(
         currentRecord: GeneralPoolRecord,
-        onSave: @escaping (Int, Int, Int) -> Void,
+        onSave: @escaping (Int, Int, String) -> Void,
         onClose: @escaping () -> Void
     ) {
         self.currentRecord = currentRecord
@@ -264,7 +358,7 @@ struct GeneralPoolRecordSheet: View {
         self.onClose = onClose
         _blueTicketDraft = State(initialValue: Self.text(for: currentRecord.blueTickets))
         _redTicketDraft = State(initialValue: Self.text(for: currentRecord.redTickets))
-        _upCountDraft = State(initialValue: Self.text(for: currentRecord.upCount))
+        _upCharactersDraft = State(initialValue: currentRecord.upCharacters)
     }
 
     var body: some View {
@@ -276,7 +370,15 @@ struct GeneralPoolRecordSheet: View {
                 RecordNumberField(title: "红票", text: $redTicketDraft, onSubmit: submit)
             }
 
-            RecordNumberField(title: "UP数", text: $upCountDraft, onSubmit: submit)
+            VStack(alignment: .leading, spacing: 7) {
+                Text("UP")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(WidgetPalette.titlePrimary)
+
+                TextField("多个角色用逗号或空格分隔", text: $upCharactersDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(submit)
+            }
 
             HStack {
                 Button("取消", action: onClose)
@@ -293,7 +395,7 @@ struct GeneralPoolRecordSheet: View {
         onSave(
             Int(blueTicketDraft) ?? 0,
             Int(redTicketDraft) ?? 0,
-            Int(upCountDraft) ?? 0
+            upCharactersDraft
         )
     }
 
@@ -326,6 +428,7 @@ private struct RecordNumberField: View {
 
 struct CrystalAdjustmentSheet<ProgressContent: View>: View {
     let title: String
+    let initialSource: String
     @ViewBuilder let progressContent: () -> ProgressContent
     let onSave: (String, Int) -> Void
     let onClose: () -> Void
@@ -366,6 +469,11 @@ struct CrystalAdjustmentSheet<ProgressContent: View>: View {
             }
         }
         .padding(16)
+        .onAppear {
+            if sourceDraft.isEmpty {
+                sourceDraft = initialSource
+            }
+        }
         .onChange(of: crystalsDraft) { _, value in
             crystalsDraft = filteredNumber(value)
         }
@@ -401,6 +509,105 @@ struct CrystalAdjustmentSheet<ProgressContent: View>: View {
     }
 }
 
+struct InventoryIncreaseSheet: View {
+    let initialSource: String
+    let onSave: (String, RewardValue) -> Void
+    let onClose: () -> Void
+
+    @State private var sourceDraft = ""
+    @State private var crystalsDraft = ""
+    @State private var blueTicketsDraft = ""
+    @State private var redTicketsDraft = ""
+
+    private var source: String {
+        sourceDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var value: RewardValue {
+        RewardValue(
+            crystals: number(from: crystalsDraft),
+            blueTickets: number(from: blueTicketsDraft),
+            redTickets: number(from: redTicketsDraft)
+        )
+    }
+
+    private var canConfirm: Bool {
+        !source.isEmpty && !value.isZero
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            panelHeader("增加", onClose: onClose)
+
+            inputField("记录项", text: $sourceDraft, placeholder: "记录项")
+
+            HStack(spacing: 10) {
+                inputField("异方晶", text: $crystalsDraft, placeholder: "0")
+                inputField("蓝票", text: $blueTicketsDraft, placeholder: "0")
+                inputField("红票", text: $redTicketsDraft, placeholder: "0")
+            }
+
+            HStack {
+                Button("取消", action: onClose)
+
+                Spacer()
+
+                Button("确认") {
+                    submit()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(WidgetPalette.pink)
+                .disabled(!canConfirm)
+            }
+        }
+        .padding(16)
+        .onAppear {
+            if sourceDraft.isEmpty {
+                sourceDraft = initialSource
+            }
+        }
+        .onChange(of: crystalsDraft) { _, value in
+            crystalsDraft = filteredNumber(value, limit: 7)
+        }
+        .onChange(of: blueTicketsDraft) { _, value in
+            blueTicketsDraft = filteredNumber(value, limit: 4)
+        }
+        .onChange(of: redTicketsDraft) { _, value in
+            redTicketsDraft = filteredNumber(value, limit: 4)
+        }
+    }
+
+    private func inputField(
+        _ title: String,
+        text: Binding<String>,
+        placeholder: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(WidgetPalette.titlePrimary)
+
+            TextField(placeholder, text: text)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(submit)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func submit() {
+        guard canConfirm else { return }
+        onSave(source, value)
+    }
+
+    private func number(from text: String) -> Int {
+        Int(text.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+    }
+
+    private func filteredNumber(_ value: String, limit: Int) -> String {
+        String(value.filter(\.isNumber).prefix(limit))
+    }
+}
+
 struct HistorySheetView: View {
     @ObservedObject var store: AppStateStore
     let onClose: () -> Void
@@ -408,7 +615,20 @@ struct HistorySheetView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            panelHeader("历史记录", onClose: onClose)
+            panelHeader("历史记录", onClose: onClose) {
+                if !store.history.isEmpty {
+                    Button("统计", action: onShowStatistics)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                    Button("撤销最近一条") {
+                        store.undoLatestHistoryEntry()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(WidgetPalette.pink)
+                }
+            }
 
             if store.history.isEmpty {
                 ContentUnavailableView(
@@ -418,18 +638,6 @@ struct HistorySheetView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                HStack {
-                    Spacer()
-                    Button("统计", action: onShowStatistics)
-                        .buttonStyle(.bordered)
-
-                    Button("撤销最近一条") {
-                        store.undoLatestHistoryEntry()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(WidgetPalette.pink)
-                }
-
                 ScrollView(.vertical, showsIndicators: true) {
                     LazyVStack(alignment: .leading, spacing: 10) {
                         ForEach(store.history) { entry in
@@ -586,11 +794,25 @@ struct HistoryIncomeStatisticsSheet: View {
 @ViewBuilder
 @MainActor
 private func panelHeader(_ title: String, onClose: @escaping () -> Void) -> some View {
+    panelHeader(title, onClose: onClose) {
+        EmptyView()
+    }
+}
+
+@ViewBuilder
+@MainActor
+private func panelHeader<Actions: View>(
+    _ title: String,
+    onClose: @escaping () -> Void,
+    @ViewBuilder actions: () -> Actions
+) -> some View {
     HStack {
         Text(title)
             .font(.title3.weight(.semibold))
 
         Spacer()
+
+        actions()
 
         Button(action: onClose) {
             Image(systemName: "xmark.circle.fill")

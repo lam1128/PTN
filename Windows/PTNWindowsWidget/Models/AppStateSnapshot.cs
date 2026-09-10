@@ -36,6 +36,7 @@ public sealed class HistoryEntry
     public RewardValue Value { get; set; } = new();
     public string? ClaimKey { get; set; }
     public string? AmountTextOverride { get; set; }
+    public GeneralPoolRecord? GeneralPoolRecordBeforeChange { get; set; }
 }
 
 public sealed class PullPlanTicketRecord
@@ -44,6 +45,7 @@ public sealed class PullPlanTicketRecord
     public int BlueTickets { get; set; }
     public int UpCount { get; set; }
     public int UpTotal { get; set; }
+    public string NonUpCharacters { get; set; } = "";
     public int BasePullCount { get; set; }
     public int ConsumedBlueTickets { get; set; }
     public int ConsumedCrystals { get; set; }
@@ -57,11 +59,17 @@ public sealed class GeneralPoolRecord
     public int BlueTickets { get; set; }
     public int RedTickets { get; set; }
     public int UpCount { get; set; }
+    public string UpCharacters { get; set; } = "";
     public int ConsumedBlueTickets { get; set; }
     public int ConsumedRedTickets { get; set; }
 
     [JsonIgnore]
-    public bool IsEmpty => BlueTickets == 0 && RedTickets == 0 && UpCount == 0;
+    public bool IsEmpty => BlueTickets == 0 && RedTickets == 0 && DisplayedUpCount == 0;
+
+    [JsonIgnore]
+    public int DisplayedUpCount => string.IsNullOrWhiteSpace(UpCharacters)
+        ? UpCount
+        : UpCharacters.Split(new[] { ',', '，', ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
 }
 
 public sealed class AppStateSnapshot
