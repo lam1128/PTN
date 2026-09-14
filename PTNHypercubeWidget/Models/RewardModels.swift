@@ -23,7 +23,7 @@ enum PullPlanBannerProgress: Int, Codable, Hashable {
     case completed = 2
 }
 
-struct RewardValue: Codable, Hashable {
+struct RewardValue: Codable, Hashable, Sendable {
     let crystals: Int
     let blueTickets: Int
     let redTickets: Int
@@ -166,9 +166,43 @@ struct GiftCode: Identifiable, Codable, Hashable, Sendable {
     let code: String
     let startsAt: Date
     let endsAt: Date
+    let rewardValue: RewardValue?
 
     func isActive(at date: Date) -> Bool {
         startsAt <= date && date < endsAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case code
+        case startsAt
+        case endsAt
+        case rewardValue
+    }
+
+    init(
+        id: Int,
+        code: String,
+        startsAt: Date,
+        endsAt: Date,
+        rewardValue: RewardValue? = nil
+    ) {
+        self.id = id
+        self.code = code
+        self.startsAt = startsAt
+        self.endsAt = endsAt
+        self.rewardValue = rewardValue
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(Int.self, forKey: .id),
+            code: try container.decode(String.self, forKey: .code),
+            startsAt: try container.decode(Date.self, forKey: .startsAt),
+            endsAt: try container.decode(Date.self, forKey: .endsAt),
+            rewardValue: try container.decodeIfPresent(RewardValue.self, forKey: .rewardValue)
+        )
     }
 }
 

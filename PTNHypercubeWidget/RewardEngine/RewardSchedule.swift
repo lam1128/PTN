@@ -126,7 +126,7 @@ enum RewardSchedule {
         RewardSourceDefinition(
             id: "daily-emotion-detection",
             title: "情绪检测",
-            value: RewardValue(crystals: 30)
+            value: RewardValue(crystals: 40)
         ),
         RewardSourceDefinition(
             id: "regulatory-event",
@@ -380,37 +380,42 @@ enum RewardSchedule {
         resetsDaily: false
     )
 
+    private static let ashTideBaseSlots = [
+        DailyProgressSlotDefinition(
+            id: "apostle-core",
+            value: RewardValue(crystals: 150),
+            labels: ["150"],
+            historySources: ["灰烬之潮·使徒核心"],
+            maxCount: 1,
+            tint: .neutral,
+            completionBonus: .zero
+        ),
+        DailyProgressSlotDefinition(
+            id: "ash-apostle-1",
+            value: RewardValue(crystals: 115),
+            labels: ["115"],
+            historySources: ["灰烬之潮·灰烬之徒第1项"],
+            maxCount: 1,
+            tint: .neutral,
+            completionBonus: .zero
+        ),
+        DailyProgressSlotDefinition(
+            id: "ash-apostle-2",
+            value: RewardValue(crystals: 85),
+            labels: ["85"],
+            historySources: ["灰烬之潮·灰烬之徒第2项"],
+            maxCount: 1,
+            tint: .neutral,
+            completionBonus: .zero
+        )
+    ]
+
+    static let ashTideProgressID = "ash-tide"
+
     static let ashTideDefinition = DailyProgressDefinition(
-        id: "ash-tide",
+        id: ashTideProgressID,
         title: "灰烬之潮",
-        slots: [
-            DailyProgressSlotDefinition(
-                id: "apostle-core",
-                value: RewardValue(crystals: 150),
-                labels: ["150"],
-                historySources: ["灰烬之潮·使徒核心"],
-                maxCount: 1,
-                tint: .neutral,
-                completionBonus: .zero
-            ),
-            DailyProgressSlotDefinition(
-                id: "ash-apostle-1",
-                value: RewardValue(crystals: 115),
-                labels: ["115"],
-                historySources: ["灰烬之潮·灰烬之徒第1项"],
-                maxCount: 1,
-                tint: .neutral,
-                completionBonus: .zero
-            ),
-            DailyProgressSlotDefinition(
-                id: "ash-apostle-2",
-                value: RewardValue(crystals: 85),
-                labels: ["85"],
-                historySources: ["灰烬之潮·灰烬之徒第2项"],
-                maxCount: 1,
-                tint: .neutral,
-                completionBonus: .zero
-            ),
+        slots: ashTideBaseSlots + [
             DailyProgressSlotDefinition(
                 id: "daily",
                 value: RewardValue(crystals: 35),
@@ -420,6 +425,24 @@ enum RewardSchedule {
                 tint: .neutral,
                 completionBonus: .zero,
                 refreshesDaily: true
+            )
+        ],
+        display: .value,
+        resetsDaily: false
+    )
+
+    static let ashTideGraceDefinition = DailyProgressDefinition(
+        id: ashTideProgressID,
+        title: "灰烬之潮",
+        slots: ashTideBaseSlots + [
+            DailyProgressSlotDefinition(
+                id: "grace",
+                value: RewardValue(crystals: 740),
+                labels: ["740"],
+                historySources: ["灰烬之潮·复刻结束奖励"],
+                maxCount: 1,
+                tint: .neutral,
+                completionBonus: .zero
             )
         ],
         display: .value,
@@ -845,7 +868,7 @@ enum RewardSchedule {
         )) ?? banner.start.date(in: berlinCalendar)
     }
 
-    // 同一开始日期的复刻池共用一个奖励周期，下一组复刻池开始时自动换周期。
+    // 同一开始日期的复刻池共用一个奖励周期，只在复刻池活动期间显示。
     static func activityRerunCycleKey(
         at date: Date,
         calendar: Calendar = .rewardCalendar
@@ -868,10 +891,11 @@ enum RewardSchedule {
     }
 
     // 灰烬之潮每三个复刻周期出现一次；同期开启的多个复刻池只计为一期。
+    // 公会战进度独立于活动复刻入口，复刻池结束后额外保留 7 天。
     static func currentAshTideWindow(
         at date: Date,
         calendar: Calendar = .rewardCalendar
-    ) -> (cycleKey: String, start: Date, end: Date)? {
+    ) -> (cycleKey: String, start: Date, rerunEnd: Date, end: Date)? {
         let cycles = Dictionary(
             grouping: pullPlanBanners.filter { $0.title == "复刻池" },
             by: { $0.start.key }
@@ -887,14 +911,19 @@ enum RewardSchedule {
 
         let anchorSourceIDs: Set<Int> = [341, 342]
         guard let anchorIndex = cycles.firstIndex(where: { !$0.sourceIDs.isDisjoint(with: anchorSourceIDs) }),
-              let activeIndex = cycles.firstIndex(where: { $0.start <= date && date < $0.end }),
+              let activeIndex = cycles.indices.last(where: { cycles[$0].start <= date }),
               activeIndex >= anchorIndex,
               (activeIndex - anchorIndex).isMultiple(of: 3) else {
             return nil
         }
 
         let cycle = cycles[activeIndex]
-        return (cycle.cycleKey, cycle.start, cycle.end)
+        let graceEnd = calendar.date(byAdding: .day, value: 7, to: cycle.end) ?? cycle.end
+        let end = cycles.indices.contains(activeIndex + 1)
+            ? min(graceEnd, cycles[activeIndex + 1].start)
+            : graceEnd
+        guard date < end else { return nil }
+        return (cycle.cycleKey, cycle.start, cycle.end, end)
     }
 
     private static func activityRerunCycleBanners(
@@ -903,8 +932,8 @@ enum RewardSchedule {
     ) -> [PullPlanBanner] {
         let rerunBanners = pullPlanBanners.filter { $0.title == "复刻池" }
         guard let start = rerunBanners
+            .filter({ $0.isActive(at: date, calendar: calendar) })
             .map({ $0.startsAt(in: calendar) })
-            .filter({ $0 <= date })
             .max() else {
             return []
         }
@@ -943,18 +972,18 @@ enum RewardSchedule {
 
     static let secretPassDefinition = ProgressModuleDefinition(
         kind: .secretPass,
-        id: "secret-society-pass",
-        title: "监察密令·渡鸦",
+        id: "secret-society-pass-epoch-overture",
+        title: "监察密令·Parfait",
         slotValue: RewardValue(blueTickets: 1),
         slotCount: 6,
         showsCycleAdvanceButton: false
     )
     static let secretPassPremiumThirdBonus = RewardValue(crystals: 200)
     static let secretPassPremiumSecondLastBonus = RewardValue(crystals: 680)
-    static let secretPassSeasonEnd = DayStamp(year: 2026, month: 9, day: 14)
+    static let secretPassSeasonEnd = DayStamp(year: 2026, month: 10, day: 26)
     static let secretPassSeasonEndHour = 4
     static let secretPassSeasonEndMinute = 59
-    static let secretPassSeasonTimeZoneIdentifier = "Asia/Shanghai"
+    static let secretPassSeasonTimeZoneIdentifier = "Europe/Berlin"
 
     static let miniGameDefinition = ProgressModuleDefinition(
         kind: .miniGame,
@@ -1003,9 +1032,6 @@ enum RewardSchedule {
     )
     static let redemptionCodeStartHour = 8
     static let redemptionCodeStartMinute = 0
-    // 2026-08-07 08:00 Europe/Berlin -> 2026-08-26 15:59 UTC+0。
-    static let redemptionCodeDuration: TimeInterval =
-        (19 * 24 * 60 * 60) + (9 * 60 * 60) + (59 * 60)
 
     static let dataGapCurrentSeasonEnd = DayStamp(year: 2026, month: 8, day: 18)
     static let dataGapCurrentSeasonEndHour = 4

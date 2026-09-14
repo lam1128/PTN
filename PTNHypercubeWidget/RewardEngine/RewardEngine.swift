@@ -58,15 +58,10 @@ struct RewardEngine {
                 claimedKeys: claimedKeys,
                 dailyCycleVersions: dailyCycleVersions
             ),
-            activityRerunProgress: makeProgress(
-                definition: RewardSchedule.activityRerunDefinition,
-                cycleKey: RewardSchedule.activityRerunCycleKey(
-                    at: currentDate,
-                    calendar: calendar
-                ),
+            activityRerunProgress: makeActivityRerunProgress(
+                now: currentDate,
                 claimedKeys: claimedKeys,
-                dailyCycleVersions: dailyCycleVersions,
-                remainingText: activityRerunRemainingText(now: currentDate)
+                dailyCycleVersions: dailyCycleVersions
             ),
             weeklyInspectionProgress: makeProgress(
                 definition: RewardSchedule.weeklyInspectionProgressDefinition,
@@ -273,6 +268,7 @@ struct RewardEngine {
             return nil
         }
 
+        let isGracePeriod = now >= window.rerunEnd
         let thirdDay = calendar.date(
             byAdding: .day,
             value: 2,
@@ -290,12 +286,14 @@ struct RewardEngine {
         }
 
         return makeProgress(
-            definition: RewardSchedule.ashTideDefinition,
+            definition: isGracePeriod
+                ? RewardSchedule.ashTideGraceDefinition
+                : RewardSchedule.ashTideDefinition,
             cycleKey: window.cycleKey,
             dailyCycleKey: DayStamp.rewardDay(from: now, calendar: calendar).key,
             claimedKeys: claimedKeys,
             dailyCycleVersions: dailyCycleVersions,
-            unlockedSlotIndices: unlockedSlots
+            unlockedSlotIndices: isGracePeriod ? [1, 2, 3, 4] : unlockedSlots
         )
     }
 
@@ -398,14 +396,36 @@ struct RewardEngine {
         )
     }
 
-    private func activityRerunRemainingText(now: Date) -> String? {
+    private func makeActivityRerunProgress(
+        now: Date,
+        claimedKeys: Set<String>,
+        dailyCycleVersions: [String: Int]
+    ) -> DailyProgress {
         guard let window = RewardSchedule.currentActivityRerunWindow(
             at: now,
             calendar: calendar
-        ), window.start <= now, now < window.end else {
-            return nil
+        ) else {
+            return DailyProgress(
+                id: RewardSchedule.activityRerunDefinition.id,
+                title: RewardSchedule.activityRerunDefinition.title,
+                slots: [],
+                display: RewardSchedule.activityRerunDefinition.display,
+                showsCycleAdvanceButton: RewardSchedule.activityRerunDefinition.showsCycleAdvanceButton,
+                rowCapacity: RewardSchedule.activityRerunDefinition.rowCapacity,
+                remainingText: nil
+            )
         }
-        return remainingText(until: window.end, now: now, hourSuffix: "小时")
+
+        return makeProgress(
+            definition: RewardSchedule.activityRerunDefinition,
+            cycleKey: RewardSchedule.activityRerunCycleKey(
+                at: now,
+                calendar: calendar
+            ),
+            claimedKeys: claimedKeys,
+            dailyCycleVersions: dailyCycleVersions,
+            remainingText: remainingText(until: window.end, now: now, hourSuffix: "小时")
+        )
     }
 
     private func makeDailyRewards(for day: DayStamp, claimedKeys: Set<String>) -> [RewardItem] {
@@ -928,7 +948,7 @@ struct RewardEngine {
             hour: RewardSchedule.redemptionCodeStartHour,
             minute: RewardSchedule.redemptionCodeStartMinute
         )
-        let end = activeStart.addingTimeInterval(RewardSchedule.redemptionCodeDuration)
+        let end = anchor.endsAt(in: calendar)
         let slotCount = isEnhancedPermanentRewardPool(anchor) ? 3 : 1
         let cycleID = "\(definition.id)-\(anchor.id)"
 

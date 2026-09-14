@@ -7,7 +7,6 @@ final class GiftCodeStore: ObservableObject {
 
     private static let cacheKey = "ptn.s1nGiftCodes"
     private static let successfulRefreshSlotKey = "ptn.s1nGiftCodesSuccessfulRefreshSlot"
-    private nonisolated static let refreshWindowDays = 7
 
     private let defaults: UserDefaults
     private var lastAttemptAt: Date?
@@ -15,28 +14,22 @@ final class GiftCodeStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.codes = Self.loadCachedCodes(from: defaults) ?? Self.fallbackCodes
+        self.codes = (Self.loadCachedCodes(from: defaults) ?? Self.fallbackCodes).map(Self.withKnownRewardValue)
     }
 
     func activeCodes(
-        for anchorStart: Date?,
+        from anchorStart: Date?,
+        to anchorEnd: Date?,
         limit: Int,
         now: Date = Date()
     ) -> [GiftCode] {
         guard limit > 0 else { return [] }
-        let calendar = Self.refreshCalendar
-        let lowerBound = anchorStart.flatMap {
-            calendar.date(byAdding: .day, value: -Self.refreshWindowDays, to: $0)
-        }
-        let upperBound = anchorStart.flatMap {
-            calendar.date(byAdding: .day, value: Self.refreshWindowDays, to: $0)
-        }
 
         return Array(codes
             .filter { code in
                 guard code.isActive(at: now) else { return false }
-                if let lowerBound, code.startsAt < lowerBound { return false }
-                if let upperBound, code.startsAt > upperBound { return false }
+                if let anchorStart, code.endsAt <= anchorStart { return false }
+                if let anchorEnd, code.startsAt >= anchorEnd { return false }
                 return true
             }
             .sorted {
@@ -84,9 +77,7 @@ final class GiftCodeStore: ObservableObject {
             guard banner.title == RewardSchedule.activityPoolTitle || banner.title == "限定池" else {
                 return false
             }
-            let startDay = calendar.startOfDay(for: banner.startsAt(in: calendar))
-            let distance = abs(calendar.dateComponents([.day], from: startDay, to: day).day ?? .max)
-            return distance <= refreshWindowDays
+            return banner.startsAt(in: calendar) <= date && date < banner.endsAt(in: calendar)
         }
         guard isInsideRefreshWindow else { return nil }
 
@@ -113,8 +104,38 @@ final class GiftCodeStore: ObservableObject {
                   now < endsAt else {
                 return nil
             }
-            return GiftCode(id: record.id, code: record.title, startsAt: startsAt, endsAt: endsAt)
+            return GiftCode(
+                id: record.id,
+                code: record.title,
+                startsAt: startsAt,
+                endsAt: endsAt,
+                rewardValue: rewardValue(forID: record.id, code: record.title)
+            )
         }
+    }
+
+    private nonisolated static func rewardValue(forID id: Int, code: String) -> RewardValue? {
+        switch id {
+        case 376:
+            return RewardValue(crystals: 60)
+        default:
+            switch code.lowercased() {
+            case "daobynature":
+                return RewardValue(crystals: 60)
+            default:
+                return nil
+            }
+        }
+    }
+
+    private nonisolated static func withKnownRewardValue(_ code: GiftCode) -> GiftCode {
+        GiftCode(
+            id: code.id,
+            code: code.code,
+            startsAt: code.startsAt,
+            endsAt: code.endsAt,
+            rewardValue: code.rewardValue ?? rewardValue(forID: code.id, code: code.code)
+        )
     }
 
     private nonisolated static func isEnglishCode(_ value: String) -> Bool {

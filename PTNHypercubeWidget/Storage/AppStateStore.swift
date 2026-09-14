@@ -670,12 +670,13 @@ final class AppStateStore: ObservableObject {
     func toggleRedemptionCodeSlot(
         _ progress: SecretPassProgress,
         slot: SecretPassSlot,
+        value: RewardValue? = nil,
         now: Date = Date()
     ) {
         let definition = RewardSchedule.redemptionCodeDefinition
         toggleStandardProgressSlot(
             slot,
-            value: definition.slotValue,
+            value: value ?? slot.rewardValue ?? definition.slotValue,
             source: "\(progress.title) 第\(slot.index)个",
             now: now
         )

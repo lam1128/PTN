@@ -390,11 +390,21 @@ struct MainWidgetView: View {
             giftCodeStore.refreshIfNeeded(now: now)
             pullPlanSyncStore.refreshIfNeeded(now: now)
             oneDriveSync.refreshIfNeeded()
+            closeGiftCodeListIfEmpty()
         }
         .onChange(of: pullPlanSyncStore.revision) {
             store.refreshRewards()
         }
+        .onChange(of: giftCodeStore.codes) {
+            closeGiftCodeListIfEmpty()
+        }
         .animation(.easeInOut(duration: 0.16), value: activeSheet)
+    }
+
+    private func closeGiftCodeListIfEmpty() {
+        if visibleGiftCodes.isEmpty {
+            isGiftCodeListExpanded = false
+        }
     }
 
     private var headerSection: some View {
@@ -560,6 +570,9 @@ struct MainWidgetView: View {
         let dataGapProgress = store.dailyProgresses.first {
             $0.id == RewardSchedule.dataGapProgressID
         }
+        let ashTideProgress = store.dailyProgresses.first {
+            $0.id == RewardSchedule.ashTideProgressID
+        }
 
         return VStack(alignment: .leading, spacing: 10) {
             sectionTitle("额外记录")
@@ -586,13 +599,25 @@ struct MainWidgetView: View {
                 )
             }
 
-            DailyProgressView(
-                progress: store.activityRerunProgress,
-                onTapSlot: { slot in
-                    store.toggleDailyProgressSlot(store.activityRerunProgress, slot: slot)
-                },
-                onAdvanceCycle: {}
-            )
+            if let ashTideProgress {
+                DailyProgressView(
+                    progress: ashTideProgress,
+                    onTapSlot: { slot in
+                        store.toggleDailyProgressSlot(ashTideProgress, slot: slot)
+                    },
+                    onAdvanceCycle: {}
+                )
+            }
+
+            if !store.activityRerunProgress.slots.isEmpty {
+                DailyProgressView(
+                    progress: store.activityRerunProgress,
+                    onTapSlot: { slot in
+                        store.toggleDailyProgressSlot(store.activityRerunProgress, slot: slot)
+                    },
+                    onAdvanceCycle: {}
+                )
+            }
 
             ForEach(dataGapRewards) { reward in
                 manualRewardRow(reward)
@@ -640,11 +665,13 @@ struct MainWidgetView: View {
             manualRewardsByID[$0]
         }
         let redemptionCodeProgress = store.redemptionCodeProgress
+        let giftCodes = visibleGiftCodes
 
         return VStack(alignment: .leading, spacing: 10) {
             // 常驻奖励不沉底：派遣和审查固定在最前面。
             ForEach(store.dailyProgresses.filter {
                 $0.id != RewardSchedule.dataGapProgressID
+                    && $0.id != RewardSchedule.ashTideProgressID
             }) { progress in
                 DailyProgressView(
                     progress: progress,
@@ -662,8 +689,10 @@ struct MainWidgetView: View {
                 )
             }
 
-            if !redemptionCodeProgress.slots.isEmpty {
-                manualProgressView(for: redemptionCodeProgress)
+            if !redemptionCodeProgress.slots.isEmpty && !giftCodes.isEmpty {
+                manualProgressView(
+                    for: redemptionCodeProgress.withGiftCodeRewards(giftCodes)
+                )
             }
 
             ForEach(permanentRewards) { reward in
@@ -811,7 +840,7 @@ struct MainWidgetView: View {
                 case .secretPass:
                     store.toggleSecretPassSlot(slot)
                 case .redemptionCode:
-                    store.toggleRedemptionCodeSlot(progress, slot: slot)
+                    store.toggleRedemptionCodeSlot(progress, slot: slot, value: slot.rewardValue)
                 case .miniGame:
                     store.toggleMiniGameSlot(slot)
                 case .photoExchange:
@@ -840,9 +869,11 @@ struct MainWidgetView: View {
     }
 
     private var visibleGiftCodes: [GiftCode] {
-        let anchorStart = RewardSchedule.currentPermanentRewardAnchor(at: Date())?.startsAt()
+        let currentDate = Date()
+        let anchor = RewardSchedule.currentPermanentRewardAnchor(at: currentDate)
         return giftCodeStore.activeCodes(
-            for: anchorStart,
+            from: anchor?.startsAt(),
+            to: anchor?.endsAt(),
             limit: store.redemptionCodeProgress.displayedTotalCount
         )
     }
@@ -1413,6 +1444,56 @@ private struct SecretPassProgressView: View {
                 .disabled(!slot.isUnlocked)
             }
         }
+    }
+}
+
+private extension SecretPassProgress {
+    func withGiftCodeRewards(_ codes: [GiftCode]) -> SecretPassProgress {
+        guard kind == .redemptionCode else { return self }
+        let updatedSlots = slots.enumerated().map { offset, slot in
+            guard codes.indices.contains(offset),
+                  let value = codes[offset].rewardValue else {
+                return slot
+            }
+            return SecretPassSlot(
+                id: slot.id,
+                index: slot.index,
+                baseClaimKey: slot.baseClaimKey,
+                premiumClaimKey: slot.premiumClaimKey,
+                rewardValue: value,
+                label: value.shortLabel,
+                isPremiumOnly: slot.isPremiumOnly,
+                isClaimed: slot.isClaimed,
+                isUnlocked: slot.isUnlocked
+            )
+        }
+        let displayedSlotValue = updatedSlots.compactMap(\.rewardValue).first ?? slotValue
+        return SecretPassProgress(
+            id: id,
+            kind: kind,
+            title: title,
+            slotValue: displayedSlotValue,
+            cycleVersion: cycleVersion,
+            slots: updatedSlots,
+            remainingText: remainingText,
+            isPremiumPurchased: isPremiumPurchased,
+            showsCycleAdvanceButton: showsCycleAdvanceButton
+        )
+    }
+}
+
+private extension RewardValue {
+    var shortLabel: String? {
+        if crystals != 0 && blueTickets == 0 && redTickets == 0 {
+            return String(crystals)
+        }
+        if crystals == 0 && blueTickets != 0 && redTickets == 0 {
+            return "\(blueTickets)票"
+        }
+        if crystals == 0 && blueTickets == 0 && redTickets != 0 {
+            return "\(redTickets)红"
+        }
+        return nil
     }
 }
 
@@ -2197,11 +2278,19 @@ private struct GiftCodeListPopup: View {
                 } else {
                     ForEach(codes) { giftCode in
                         HStack(spacing: 6) {
-                            Text(giftCode.code)
-                                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                .foregroundStyle(WidgetPalette.titlePrimary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.72)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(giftCode.code)
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(WidgetPalette.titlePrimary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.72)
+
+                                if let rewardValue = giftCode.rewardValue {
+                                    Text(rewardValue.inlineDescription(withPlusSign: true))
+                                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                                        .foregroundStyle(WidgetPalette.accentSoft)
+                                }
+                            }
 
                             Spacer(minLength: 4)
 
