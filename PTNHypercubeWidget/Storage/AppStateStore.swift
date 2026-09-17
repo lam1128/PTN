@@ -183,6 +183,8 @@ final class AppStateStore: ObservableObject {
         ensurePullPlanRecordHistory()
         ensureGeneralPoolRecordHistory()
         removeObsoleteReviewCompletionRewards()
+        removeTicketlessPullPlanRecords()
+        migrateLowerHalfDataGapMergedDays()
         bootstrapInitialStateIfNeeded()
         calibrateAutomaticStorageIfNeeded()
         refreshRewards()
@@ -261,6 +263,7 @@ final class AppStateStore: ObservableObject {
         generalPoolRecord = snapshot.generalPoolRecord ?? .empty
         hasPremiumSecretPass = snapshot.hasPremiumSecretPass
         usesExtraTranslucentBackground = snapshot.usesExtraTranslucentBackground
+        let removedTicketlessPullPlanRecords = removeTicketlessPullPlanRecords(persistChanges: false)
 
         if let automaticStorageLastUpdateAt = snapshot.automaticStorageLastUpdateAt {
             defaults.set(automaticStorageLastUpdateAt, forKey: StorageKey.automaticStorageLastUpdateAt)
@@ -273,7 +276,7 @@ final class AppStateStore: ObservableObject {
         )
 
         let migratedDarkZoneHistory = migrateDarkZoneWeeklyHistory(persistChanges: false)
-        persist(notify: migratedDarkZoneHistory || removedAssetNeutralHistory)
+        persist(notify: migratedDarkZoneHistory || removedAssetNeutralHistory || removedTicketlessPullPlanRecords)
         refreshRewards()
         return true
     }
@@ -832,13 +835,15 @@ final class AppStateStore: ObservableObject {
         let initialPity = previous.isEmpty
             ? (pullPlanPityValue(for: bannerID) ?? 0)
             : max(0, previous.basePullCount - previousRecordedTickets)
-        let hasRecordValues = recordedTickets > 0 || upCount > 0 || upTotal > 0
+        let hasRecordValues = recordedTickets > 0
         let updated = PullPlanTicketRecord(
             giftTickets: sanitizedGiftTickets,
             blueTickets: sanitizedBlueTickets,
-            upCount: max(0, upCount),
-            upTotal: max(0, upTotal),
-            nonUpCharacters: nonUpCharacters.trimmingCharacters(in: .whitespacesAndNewlines),
+            upCount: hasRecordValues ? max(0, upCount) : 0,
+            upTotal: hasRecordValues ? max(0, upTotal) : 0,
+            nonUpCharacters: hasRecordValues
+                ? nonUpCharacters.trimmingCharacters(in: .whitespacesAndNewlines)
+                : "",
             basePullCount: hasRecordValues ? initialPity + recordedTickets : 0,
             consumedBlueTickets: consumedBlueTickets,
             consumedCrystals: consumedCrystals
@@ -1402,6 +1407,100 @@ final class AppStateStore: ObservableObject {
         }
         history.removeAll { obsoleteIDs.contains($0.id) }
         persist()
+    }
+
+    @discardableResult
+    private func removeTicketlessPullPlanRecords(persistChanges: Bool = true) -> Bool {
+        let ticketlessRecordIDs = pullPlanTicketRecords
+            .filter { _, record in
+                record.giftTickets == 0
+                    && record.blueTickets == 0
+                    && record.consumedBlueTickets == 0
+                    && record.consumedCrystals == 0
+            }
+            .map(\.key)
+
+        guard !ticketlessRecordIDs.isEmpty else { return false }
+        for bannerID in ticketlessRecordIDs {
+            pullPlanTicketRecords.removeValue(forKey: bannerID)
+            history.removeAll { $0.claimKey == pullPlanRecordClaimKey(for: bannerID) }
+        }
+        if persistChanges {
+            persist()
+        }
+        return true
+    }
+
+    private func migrateLowerHalfDataGapMergedDays() {
+        let cycleKey = "2026-09-15"
+        let didMigrateFirstDay = migrateLowerHalfDataGapMergedSlot(
+            legacyKeys: [
+                "data-gap-current-\(cycleKey)-data-gap-1-1",
+                "data-gap-current-\(cycleKey)-data-gap-2-1"
+            ],
+            mergedKey: "data-gap-current-\(cycleKey)-data-gap-lower-1-1",
+            migratedValue: RewardValue(crystals: 420),
+            source: "数据间隙·第9赛季下半 第1项差额"
+        )
+        let didMigrateSecondDay = migrateLowerHalfDataGapMergedSlot(
+            legacyKeys: [
+                "data-gap-current-\(cycleKey)-data-gap-lower-2-1",
+                "data-gap-current-\(cycleKey)-data-gap-lower-3-1"
+            ],
+            mergedKey: "data-gap-current-\(cycleKey)-data-gap-lower-day2-1",
+            migratedValue: RewardValue(crystals: 270),
+            source: "数据间隙·第9赛季下半 第2项差额"
+        )
+        let didMigrateThirdDay = migrateLowerHalfDataGapMergedSlot(
+            legacyKeys: [
+                "data-gap-current-\(cycleKey)-data-gap-lower-day3-1-1",
+                "data-gap-current-\(cycleKey)-data-gap-lower-day3-2-1",
+                "data-gap-current-\(cycleKey)-data-gap-lower-4-1",
+                "data-gap-current-\(cycleKey)-data-gap-lower-5-1"
+            ],
+            mergedKey: "data-gap-current-\(cycleKey)-data-gap-lower-day3-1",
+            migratedValue: RewardValue(crystals: 240),
+            source: "数据间隙·第9赛季下半 第3项差额"
+        )
+
+        if didMigrateFirstDay || didMigrateSecondDay || didMigrateThirdDay {
+            persist()
+        }
+    }
+
+    private func migrateLowerHalfDataGapMergedSlot(
+        legacyKeys: [String],
+        mergedKey: String,
+        migratedValue: RewardValue,
+        source: String
+    ) -> Bool {
+        guard !claimedRewardKeys.contains(mergedKey),
+              legacyKeys.contains(where: { claimedRewardKeys.contains($0) }) else {
+            return false
+        }
+
+        let existingValue = legacyKeys.reduce(RewardValue.zero) { partial, key in
+            partial + history
+                .filter { $0.claimKey == key }
+                .reduce(RewardValue.zero) { $0 + $1.value }
+        }
+        let adjustment = migratedValue - existingValue
+
+        claimedRewardKeys.insert(mergedKey)
+        if !adjustment.isZero {
+            apply(value: adjustment)
+            history.insert(
+                HistoryEntry(
+                    timestamp: Date(),
+                    source: source,
+                    value: adjustment,
+                    claimKey: mergedKey,
+                    amountTextOverride: adjustment.inlineDescription(withPlusSign: true)
+                ),
+                at: 0
+            )
+        }
+        return true
     }
 
     @discardableResult

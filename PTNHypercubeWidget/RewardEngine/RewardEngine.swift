@@ -302,31 +302,34 @@ struct RewardEngine {
         claimedKeys: Set<String>,
         dailyCycleVersions: [String: Int]
     ) -> DailyProgress? {
-        let definition = RewardSchedule.dataGapProgressDefinition
-        let start = preciseDate(
-            day: RewardSchedule.dataGapCurrentStart,
-            hour: RewardSchedule.dataGapCurrentStartHour,
-            minute: 0
-        )
+        guard let cycle = RewardSchedule.currentDataGapCycle(at: now, calendar: calendar),
+              now < cycle.end else {
+            return nil
+        }
+        let isLowerHalf = cycle.halfIndex == 1
+        let definition = isLowerHalf
+            ? RewardSchedule.dataGapLowerHalfProgressDefinition
+            : RewardSchedule.dataGapProgressDefinition
+        let start = cycle.start
         let firstNextDay = calendar.date(byAdding: .day, value: 1, to: start) ?? start
         let secondNextDay = calendar.date(byAdding: .day, value: 2, to: start) ?? start
-        let end = calendar.date(byAdding: .day, value: 3, to: start) ?? start
-        guard now >= start, now < end else { return nil }
 
-        var unlocked = Set([1, 2])
+        var unlocked = isLowerHalf ? Set([1]) : Set([1, 2])
         if now >= settingTime(on: firstNextDay, hour: RewardSchedule.dataGapCurrentUnlockHour) {
-            unlocked.formUnion([3, 4])
+            unlocked.formUnion(isLowerHalf ? [2] : [3, 4])
         }
         if now >= settingTime(on: secondNextDay, hour: RewardSchedule.dataGapCurrentUnlockHour) {
-            unlocked.formUnion([5, 6])
+            unlocked.formUnion(isLowerHalf ? [3] : [5, 6])
         }
 
         return makeProgress(
             definition: definition,
-            cycleKey: RewardSchedule.dataGapCurrentStart.key,
+            cycleKey: cycle.cycleKey,
+            titleOverride: cycle.title,
             claimedKeys: claimedKeys,
             dailyCycleVersions: dailyCycleVersions,
-            unlockedSlotIndices: unlocked
+            unlockedSlotIndices: unlocked,
+            remainingText: remainingText(until: cycle.end, now: now, hourSuffix: "时")
         )
     }
 
@@ -338,6 +341,7 @@ struct RewardEngine {
         definition: DailyProgressDefinition,
         cycleKey: String,
         dailyCycleKey: String? = nil,
+        titleOverride: String? = nil,
         claimedKeys: Set<String>,
         dailyCycleVersions: [String: Int],
         unlockedSlotIndices: Set<Int>? = nil,
@@ -387,7 +391,7 @@ struct RewardEngine {
         }
         return DailyProgress(
             id: definition.id,
-            title: definition.title,
+            title: titleOverride ?? definition.title,
             slots: slots,
             display: definition.display,
             showsCycleAdvanceButton: definition.showsCycleAdvanceButton,
@@ -1028,12 +1032,11 @@ struct RewardEngine {
 
     private func manualUnknownRemainingText(for sourceID: String, now: Date) -> String? {
         guard sourceID == RewardSchedule.dataGapManualSourceID else { return nil }
+        guard let cycle = RewardSchedule.currentDataGapCycle(at: now, calendar: calendar) else {
+            return nil
+        }
         return remainingText(
-            until: preciseDate(
-                day: RewardSchedule.dataGapCurrentSeasonEnd,
-                hour: RewardSchedule.dataGapCurrentSeasonEndHour,
-                minute: RewardSchedule.dataGapCurrentSeasonEndMinute
-            ),
+            until: cycle.end,
             now: now,
             hourSuffix: "时"
         )

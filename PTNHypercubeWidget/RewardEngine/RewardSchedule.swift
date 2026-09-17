@@ -8,6 +8,18 @@ struct DataGapWindow: Identifiable, Hashable {
     let dailyValue: RewardValue
 }
 
+struct DataGapCycle: Hashable {
+    let season: Int
+    let halfIndex: Int
+    let start: Date
+    let end: Date
+    let cycleKey: String
+
+    var title: String {
+        "数据间隙·第\(season)赛季\(halfIndex == 0 ? "上半" : "下半")"
+    }
+}
+
 struct ManualUnknownSourceDefinition: Identifiable, Hashable {
     let id: String
     let title: String
@@ -570,18 +582,20 @@ enum RewardSchedule {
     // 数据间隙只录入已知窗口；未知后续档期不做自动推算。
     static let dataGapWindows: [DataGapWindow] = []
 
-    static let dataGapCurrentStart = DayStamp(year: 2026, month: 8, day: 18)
-    static let dataGapCurrentStartHour = 15
+    static let dataGapCycleAnchorStart = DayStamp(year: 2026, month: 8, day: 18)
+    static let dataGapCycleAnchorSeason = 9
+    static let dataGapCycleAnchorHalfIndex = 0
+    static let dataGapCycleLengthDays = 28
+    static let dataGapCurrentStartHour = 5
     static let dataGapCurrentUnlockHour = 5
     static let dataGapProgressDefinition = DailyProgressDefinition(
         id: dataGapProgressID,
-        title: "数据间隙·第9赛季上半",
+        title: "数据间隙",
         slots: [150, 340, 160, 340, 110, 340].enumerated().map { index, value in
             DailyProgressSlotDefinition(
                 id: "data-gap-\(index + 1)",
                 value: RewardValue(crystals: value),
                 labels: [String(value)],
-                historySources: ["数据间隙·第9赛季上半 第\(index + 1)项"],
                 maxCount: 1,
                 tint: .neutral,
                 completionBonus: .zero,
@@ -590,6 +604,27 @@ enum RewardSchedule {
         },
         display: .value,
         rowCapacity: 6
+    )
+    static let dataGapLowerHalfProgressDefinition = DailyProgressDefinition(
+        id: dataGapProgressID,
+        title: "数据间隙",
+        slots: [
+            (id: "data-gap-lower-1", value: 420, shape: DailyProgressSlotShape.capsule),
+            (id: "data-gap-lower-day2", value: 270, shape: DailyProgressSlotShape.capsule),
+            (id: "data-gap-lower-day3", value: 240, shape: DailyProgressSlotShape.capsule)
+        ].map { slot in
+            DailyProgressSlotDefinition(
+                id: slot.id,
+                value: RewardValue(crystals: slot.value),
+                labels: [String(slot.value)],
+                maxCount: 1,
+                tint: .neutral,
+                completionBonus: .zero,
+                shape: slot.shape
+            )
+        },
+        display: .value,
+        rowCapacity: 3
     )
 
     // 这些来源奖励总量已知，但用户要求保留为手动领取，不自动推日期。
@@ -940,6 +975,57 @@ enum RewardSchedule {
         return rerunBanners.filter { $0.startsAt(in: calendar) == start }
     }
 
+    static func currentDataGapCycle(
+        at date: Date,
+        calendar: Calendar = .rewardCalendar
+    ) -> DataGapCycle? {
+        guard let anchorStart = calendar.date(from: DateComponents(
+            year: dataGapCycleAnchorStart.year,
+            month: dataGapCycleAnchorStart.month,
+            day: dataGapCycleAnchorStart.day,
+            hour: dataGapCurrentStartHour
+        )), date >= anchorStart else {
+            return nil
+        }
+
+        let elapsedDays = max(
+            0,
+            calendar.dateComponents([.day], from: anchorStart, to: date).day ?? 0
+        )
+        var cycleIndex = elapsedDays / dataGapCycleLengthDays
+        var start = calendar.date(
+            byAdding: .day,
+            value: cycleIndex * dataGapCycleLengthDays,
+            to: anchorStart
+        ) ?? anchorStart
+        var end = calendar.date(
+            byAdding: .day,
+            value: dataGapCycleLengthDays,
+            to: start
+        ) ?? start
+
+        while date >= end {
+            cycleIndex += 1
+            start = end
+            end = calendar.date(
+                byAdding: .day,
+                value: dataGapCycleLengthDays,
+                to: start
+            ) ?? start
+        }
+
+        let halfOffset = dataGapCycleAnchorHalfIndex + cycleIndex
+        let halfIndex = halfOffset % 2
+        let season = dataGapCycleAnchorSeason + (halfOffset / 2)
+        return DataGapCycle(
+            season: season,
+            halfIndex: halfIndex,
+            start: start,
+            end: end,
+            cycleKey: DayStamp.from(start, calendar: calendar).key
+        )
+    }
+
     // 抽卡规划的“垫抽数”按池子规则分别保存：
     // - 活动池、复刻池：各自独立计算
     // - 定轨池：共用同一套垫抽
@@ -1032,10 +1118,6 @@ enum RewardSchedule {
     )
     static let redemptionCodeStartHour = 8
     static let redemptionCodeStartMinute = 0
-
-    static let dataGapCurrentSeasonEnd = DayStamp(year: 2026, month: 8, day: 18)
-    static let dataGapCurrentSeasonEndHour = 4
-    static let dataGapCurrentSeasonEndMinute = 0
 
     static func eventTrialTitle(for banners: [PullPlanBanner]) -> String {
         let bannerIDSet = Set(banners.map(\.id))
