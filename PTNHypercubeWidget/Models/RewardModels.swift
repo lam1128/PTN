@@ -15,6 +15,7 @@ enum PullPlanSelectionKind: String, Codable, Hashable {
     case none
     case targetChoice
     case lockCount
+    case multiLockCount
 }
 
 enum PullPlanBannerProgress: Int, Codable, Hashable {
@@ -750,6 +751,8 @@ struct HistoryEntry: Identifiable, Codable, Hashable {
     let claimKey: String?
     let amountTextOverride: String?
     let generalPoolRecordBeforeChange: GeneralPoolRecord?
+    let pullPlanRecordBeforeChange: PullPlanTicketRecord?
+    let pullPlanPityValueBeforeChange: Int?
 
     init(
         id: UUID = UUID(),
@@ -758,7 +761,9 @@ struct HistoryEntry: Identifiable, Codable, Hashable {
         value: RewardValue,
         claimKey: String?,
         amountTextOverride: String? = nil,
-        generalPoolRecordBeforeChange: GeneralPoolRecord? = nil
+        generalPoolRecordBeforeChange: GeneralPoolRecord? = nil,
+        pullPlanRecordBeforeChange: PullPlanTicketRecord? = nil,
+        pullPlanPityValueBeforeChange: Int? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -767,6 +772,8 @@ struct HistoryEntry: Identifiable, Codable, Hashable {
         self.claimKey = claimKey
         self.amountTextOverride = amountTextOverride
         self.generalPoolRecordBeforeChange = generalPoolRecordBeforeChange
+        self.pullPlanRecordBeforeChange = pullPlanRecordBeforeChange
+        self.pullPlanPityValueBeforeChange = pullPlanPityValueBeforeChange
     }
 
     var amountText: String {

@@ -155,7 +155,7 @@ struct MainWidgetView: View {
     @AppStorage("ptn.lastConsumptionAdjustmentSource") private var lastConsumptionAdjustmentSource = ""
     @AppStorage("ptn.lastIncreaseAdjustmentSource") private var lastIncreaseAdjustmentSource = ""
     private let refreshTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
-    private let upPopupWidth: CGFloat = 150
+    private let upPopupWidth: CGFloat = 260
     private let giftCodePopupWidth: CGFloat = 260
     private let pullPlanPopupWidth: CGFloat = 260
 
@@ -299,8 +299,12 @@ struct MainWidgetView: View {
                     if isUpListExpanded, let anchor = anchors.first {
                         upListPopup
                             .offset(
-                                x: proxy[anchor].minX - 3,
-                                y: proxy[anchor].minY + 20
+                                x: popupOriginX(
+                                    anchorX: proxy[anchor].minX,
+                                    popupWidth: upPopupWidth,
+                                    totalWidth: proxy.size.width
+                                ),
+                                y: proxy[anchor].maxY + 8
                             )
                             .zIndex(WidgetPopupLayer.popup)
                     }
@@ -336,12 +340,21 @@ struct MainWidgetView: View {
                             banner: banner,
                             selectedUpCharacter: store.selectedPullPlanUpChoices[banner.id],
                             selectedLockLevel: store.selectedPullPlanLockChoices[banner.id],
+                            selectedCharacterLockLevels: store.pullPlanCharacterLockLevels(for: banner),
                             onToggleUpCharacter: { character in
                                 store.togglePullPlanUpChoice(bannerID: banner.id, character: character)
                                 expandedPullPlanBannerIDs.removeAll()
                             },
                             onToggleLockLevel: { lockLevel in
                                 store.togglePullPlanLockChoice(bannerID: banner.id, lockLevel: lockLevel)
+                                expandedPullPlanBannerIDs.removeAll()
+                            },
+                            onSetCharacterLockLevel: { character, lockLevel in
+                                store.setPullPlanCharacterLockChoice(
+                                    bannerID: banner.id,
+                                    character: character,
+                                    lockLevel: lockLevel
+                                )
                                 expandedPullPlanBannerIDs.removeAll()
                             }
                         )
@@ -567,6 +580,9 @@ struct MainWidgetView: View {
         }
         let remainingProgressItems = [store.miniGameProgress, store.anniversarySignInProgress]
             .filter { !$0.slots.isEmpty }
+        let emotionProgress = store.dailyProgresses.first {
+            $0.id == RewardSchedule.dailyEmotionDetectionID
+        }
         let dataGapProgress = store.dailyProgresses.first {
             $0.id == RewardSchedule.dataGapProgressID
         }
@@ -579,6 +595,16 @@ struct MainWidgetView: View {
 
             ForEach(dailyRewards) { reward in
                 rewardRow(reward)
+            }
+
+            if let emotionProgress {
+                DailyProgressView(
+                    progress: emotionProgress,
+                    onTapSlot: { slot in
+                        store.toggleDailyProgressSlot(emotionProgress, slot: slot)
+                    },
+                    onAdvanceCycle: {}
+                )
             }
 
             ForEach(emotionRewards) { reward in
@@ -672,6 +698,7 @@ struct MainWidgetView: View {
             ForEach(store.dailyProgresses.filter {
                 $0.id != RewardSchedule.dataGapProgressID
                     && $0.id != RewardSchedule.ashTideProgressID
+                    && $0.id != RewardSchedule.dailyEmotionDetectionID
             }) { progress in
                 DailyProgressView(
                     progress: progress,
@@ -750,6 +777,7 @@ struct MainWidgetView: View {
                         pityValue: store.pullPlanPityValue(for: banner.id),
                         selectedUpCharacter: store.selectedPullPlanUpChoices[banner.id],
                         selectedLockLevel: store.selectedPullPlanLockChoices[banner.id],
+                        selectedCharacterLockLevels: store.pullPlanCharacterLockLevels(for: banner),
                         isExpanded: expandedPullPlanBannerIDs.contains(banner.id),
                         onToggleBanner: { store.togglePullPlanBanner(banner.id, allowCompleted: isActive) },
                         onSetPityValue: { value in
@@ -760,6 +788,14 @@ struct MainWidgetView: View {
                         },
                         onToggleLockLevel: { lockLevel in
                             store.togglePullPlanLockChoice(bannerID: banner.id, lockLevel: lockLevel)
+                        },
+                        onSetCharacterLockLevel: { character, lockLevel in
+                            store.setPullPlanCharacterLockChoice(
+                                bannerID: banner.id,
+                                character: character,
+                                lockLevel: lockLevel
+                            )
+                            expandedPullPlanBannerIDs.removeAll()
                         },
                         onOpenRecord: {
                             expandedPullPlanBannerIDs.removeAll()
@@ -890,30 +926,43 @@ struct MainWidgetView: View {
                 }
                 return lhs.id < rhs.id
             }
-            .compactMap { banner in
+            .flatMap { banner -> [UpListEntry] in
+                guard banner.endsAt() > currentDate else { return [] }
                 let progress = store.pullPlanBannerProgress(for: banner.id, allowCompleted: banner.isActive(at: currentDate))
-                guard progress == .planned else { return nil }
+                guard progress == .planned else { return [] }
 
                 switch banner.selectionKind {
                 case .none:
-                    return UpListEntry(
+                    return [UpListEntry(
                         id: banner.id,
                         title: banner.title,
                         detail: banner.characters.first ?? "未命名"
-                    )
+                    )]
                 case .targetChoice:
-                    return UpListEntry(
+                    return [UpListEntry(
                         id: banner.id,
                         title: banner.title,
                         detail: store.selectedPullPlanUpChoices[banner.id] ?? banner.characters.joined(separator: " / ")
-                    )
+                    )]
                 case .lockCount:
-                    guard let lockLevel = store.selectedPullPlanLockChoices[banner.id] else { return nil }
-                    return UpListEntry(
+                    guard let lockLevel = store.selectedPullPlanLockChoices[banner.id] else { return [] }
+                    return [UpListEntry(
                         id: banner.id,
                         title: banner.title,
                         detail: "\(banner.characters.first ?? "未命名") ×\(lockLevel + 1)"
-                    )
+                    )]
+                case .multiLockCount:
+                    let characterLocks = store.pullPlanCharacterLockLevels(for: banner)
+                    return banner.characters.compactMap { character in
+                        guard let lockLevel = characterLocks[character] else {
+                            return nil
+                        }
+                        return UpListEntry(
+                            id: "\(banner.id)-\(character)",
+                            title: banner.title,
+                            detail: "\(character) ×\(lockLevel + 1)"
+                        )
+                    }
                 }
             }
     }
@@ -932,7 +981,15 @@ struct MainWidgetView: View {
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(WidgetPalette.accentSoft)
                 } else {
-                    ForEach(upListEntries) { entry in
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(), spacing: 6),
+                            GridItem(.flexible(), spacing: 6)
+                        ],
+                        alignment: .leading,
+                        spacing: 6
+                    ) {
+                        ForEach(upListEntries) { entry in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(entry.title)
                                 .font(.system(size: 11, weight: .bold, design: .rounded))
@@ -943,8 +1000,8 @@ struct MainWidgetView: View {
                             Text(entry.detail)
                                 .font(.system(size: 11, weight: .medium, design: .rounded))
                                 .foregroundStyle(WidgetPalette.titleSecondary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 8)
@@ -965,6 +1022,7 @@ struct MainWidgetView: View {
                         .overlay {
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
                                 .strokeBorder(Color.white.opacity(0.46), lineWidth: 1)
+                        }
                         }
                     }
                 }
@@ -1019,9 +1077,15 @@ struct MainWidgetView: View {
     }
 
     private func pullPlanPopupHeight(for banner: PullPlanBanner) -> CGFloat {
-        let rowCount = banner.selectionKind == .lockCount
-            ? 3
-            : max(1, Int(ceil(Double(banner.characters.count) / 2.0)))
+        let rowCount: Int
+        switch banner.selectionKind {
+        case .lockCount:
+            rowCount = 3
+        case .multiLockCount:
+            rowCount = max(1, banner.characters.count)
+        case .none, .targetChoice:
+            rowCount = max(1, Int(ceil(Double(banner.characters.count) / 2.0)))
+        }
         return 20 + CGFloat(rowCount * 32) + CGFloat(max(rowCount - 1, 0) * 8)
     }
 
@@ -1807,11 +1871,13 @@ private struct PullPlanBannerCardView: View {
     let pityValue: Int?
     let selectedUpCharacter: String?
     let selectedLockLevel: Int?
+    let selectedCharacterLockLevels: [String: Int]
     let isExpanded: Bool
     let onToggleBanner: () -> Void
     let onSetPityValue: (Int?) -> Void
     let onToggleUpCharacter: (String) -> Void
     let onToggleLockLevel: (Int) -> Void
+    let onSetCharacterLockLevel: (String, Int?) -> Void
     let onOpenRecord: () -> Void
     let onToggleExpand: () -> Void
 
@@ -1945,7 +2011,9 @@ private struct PullPlanBannerCardView: View {
             if let character = banner.characters.first, let selectedLockLevel {
                 return "\(character) · \(selectedLockLevel)锁"
             }
-            return banner.characters.first
+            return nil
+        case .multiLockCount:
+            return nil
         case .none:
             return banner.characters.first
         }
@@ -2007,8 +2075,10 @@ private struct PullPlanSelectionPopup: View {
     let banner: PullPlanBanner
     let selectedUpCharacter: String?
     let selectedLockLevel: Int?
+    let selectedCharacterLockLevels: [String: Int]
     let onToggleUpCharacter: (String) -> Void
     let onToggleLockLevel: (Int) -> Void
+    let onSetCharacterLockLevel: (String, Int?) -> Void
 
     var body: some View {
         WidgetPopupContainer(
@@ -2018,36 +2088,56 @@ private struct PullPlanSelectionPopup: View {
             shadowRadius: 12,
             shadowY: 5
         ) {
-            LazyVGrid(
-                columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)],
-                alignment: .leading,
-                spacing: 8
-            ) {
-                switch banner.selectionKind {
-                case .targetChoice:
+            switch banner.selectionKind {
+            case .multiLockCount:
+                VStack(alignment: .leading, spacing: 8) {
                     ForEach(banner.characters, id: \.self) { character in
-                        selectionButton(
-                            title: character,
-                            isSelected: selectedUpCharacter == character
-                        ) {
-                            onToggleUpCharacter(character)
-                        }
+                        PullPlanCharacterLockField(
+                            character: character,
+                            value: selectedCharacterLockLevels[character],
+                            onSetValue: { lockLevel in
+                                onSetCharacterLockLevel(character, lockLevel)
+                            },
+                            selectionContent: { title, isSelected in
+                                AnyView(selectionContent(title: title, isSelected: isSelected))
+                            }
+                        )
                     }
-                case .lockCount:
-                    ForEach(0...5, id: \.self) { lockLevel in
-                        selectionButton(
-                            title: "\(lockLevel)锁",
-                            isSelected: selectedLockLevel == lockLevel
-                        ) {
-                            onToggleLockLevel(lockLevel)
-                        }
-                    }
-                case .none:
-                    EmptyView()
                 }
+                .padding(10)
+                .frame(width: 260, alignment: .leading)
+            case .targetChoice, .lockCount, .none:
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)],
+                    alignment: .leading,
+                    spacing: 8
+                ) {
+                    switch banner.selectionKind {
+                    case .targetChoice:
+                        ForEach(banner.characters, id: \.self) { character in
+                            selectionButton(
+                                title: character,
+                                isSelected: selectedUpCharacter == character
+                            ) {
+                                onToggleUpCharacter(character)
+                            }
+                        }
+                    case .lockCount:
+                        ForEach(0...5, id: \.self) { lockLevel in
+                            selectionButton(
+                                title: "\(lockLevel)锁",
+                                isSelected: selectedLockLevel == lockLevel
+                            ) {
+                                onToggleLockLevel(lockLevel)
+                            }
+                        }
+                    case .none, .multiLockCount:
+                        EmptyView()
+                    }
+                }
+                .padding(10)
+                .frame(width: 260, alignment: .leading)
             }
-            .padding(10)
-            .frame(width: 260, alignment: .leading)
         }
     }
 
@@ -2057,28 +2147,153 @@ private struct PullPlanSelectionPopup: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 12, weight: .semibold))
-
-                Text(title)
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(isSelected ? WidgetPalette.pinkStrong : WidgetPalette.accentMuted)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(isSelected ? Color.white.opacity(0.34) : Color.white.opacity(0.16))
-            )
-            .overlay {
-                Capsule(style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.26), lineWidth: 1)
-            }
+            selectionContent(title: title, isSelected: isSelected)
         }
         .buttonStyle(.plain)
+    }
+
+    private func selectionContent(title: String, isSelected: Bool) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 12, weight: .semibold))
+
+            Text(title)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .lineLimit(1)
+        }
+        .foregroundStyle(isSelected ? WidgetPalette.pinkStrong : WidgetPalette.accentMuted)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            Capsule(style: .continuous)
+                .fill(isSelected ? Color.white.opacity(0.34) : Color.white.opacity(0.16))
+        )
+        .overlay {
+            Capsule(style: .continuous)
+                .strokeBorder(Color.white.opacity(0.26), lineWidth: 1)
+        }
+    }
+}
+
+private struct PullPlanCharacterLockField: View {
+    let character: String
+    let value: Int?
+    let onSetValue: (Int?) -> Void
+    let selectionContent: (String, Bool) -> AnyView
+
+    @State private var text: String = ""
+    @State private var isFocused = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button {
+                if value == nil {
+                    onSetValue(0)
+                } else {
+                    onSetValue(nil)
+                }
+            } label: {
+                selectionContent(character, value != nil)
+            }
+            .buttonStyle(.plain)
+
+            Text("锁")
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundStyle(WidgetPalette.mutedText)
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(isFocused ? Color.white.opacity(0.22) : Color.white.opacity(0.14))
+
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(
+                        WidgetPalette.pityBorder.opacity(isFocused ? 0.72 : 0.34),
+                        lineWidth: 1
+                    )
+
+                if text.isEmpty && !isFocused {
+                    Text(value == nil ? "" : "0")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(WidgetPalette.mutedText.opacity(0.78))
+                }
+
+#if os(macOS)
+                InlineNumericTextField(
+                    text: editingText,
+                    isFocused: $isFocused,
+                    textColor: NSColor(
+                        red: 0.46,
+                        green: 0.17,
+                        blue: 0.29,
+                        alpha: 1
+                    ),
+                    font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                    onCommit: commitText
+                )
+                .padding(.horizontal, 4)
+#else
+                TextField("0", text: editingText)
+                    .keyboardType(.numberPad)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(WidgetPalette.accent)
+                    .onSubmit(commitText)
+                    .padding(.horizontal, 4)
+#endif
+            }
+            .frame(width: 34, height: 26)
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .onTapGesture {
+                if value == nil {
+                    onSetValue(0)
+                    text = "0"
+                }
+                isFocused = true
+            }
+        }
+        .onAppear {
+            syncText(with: value)
+        }
+        .onChange(of: value) { _, newValue in
+            syncText(with: newValue)
+        }
+        .onChange(of: isFocused) { _, newValue in
+            if !newValue {
+                commitText()
+            }
+        }
+    }
+
+    private var editingText: Binding<String> {
+        Binding(
+            get: { text },
+            set: { newValue in
+                text = filteredText(from: newValue)
+            }
+        )
+    }
+
+    private func syncText(with value: Int?) {
+        let newText = value.map(String.init) ?? ""
+        if newText != text {
+            text = newText
+        }
+    }
+
+    private func filteredText(from rawText: String) -> String {
+        String(rawText.filter(\.isNumber).prefix(1))
+    }
+
+    private func commitText() {
+        let committedText = filteredText(from: text)
+        if committedText != text {
+            text = committedText
+        }
+        guard value != nil || !committedText.isEmpty else {
+            onSetValue(nil)
+            return
+        }
+        onSetValue(Int(committedText) ?? 0)
     }
 }
 

@@ -168,11 +168,19 @@ final class PullPlanSyncStore: ObservableObject {
             return ("定轨池", split(title, separator: "&"), .targetChoice)
         case "collective":
             return ("统合池", split(title, separator: ","), .targetChoice)
-        case "exclusive", "exclusive rerun":
+        case "exclusive":
             return ("限定池", split(removingRerunSuffix(from: title), separator: "&"), .lockCount)
+        case "exclusive rerun":
+            return ("限定复刻池", splitLimitedRerunCharacters(from: title), .multiLockCount)
         default:
             return nil
         }
+    }
+
+    private nonisolated static func splitLimitedRerunCharacters(from value: String) -> [String] {
+        let title = removingRerunSuffix(from: value)
+        let separator: Character = title.contains(",") ? "," : "&"
+        return split(title, separator: separator)
     }
 
     private nonisolated static func split(_ value: String, separator: Character) -> [String] {

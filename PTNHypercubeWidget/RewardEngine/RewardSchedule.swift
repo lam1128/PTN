@@ -87,7 +87,7 @@ enum RewardSchedule {
     static let darkZoneAnchorMonday = DayStamp(year: 2026, month: 8, day: 10)
     static let darkZoneCycleWeeks = 6
     static let darkZoneWeeklyValue = RewardValue(crystals: 510)
-    static let darkZoneSeasonOpeningBonus = RewardValue(crystals: 450)
+    static let darkZoneSeasonOpeningBonus = RewardValue(crystals: 510)
 
     static let dailyFixedClaimSource = "每日监察任务"
     static let historySourceAliases = [
@@ -136,11 +136,6 @@ enum RewardSchedule {
 
     static let dailyExtraSources: [RewardSourceDefinition] = [
         RewardSourceDefinition(
-            id: "daily-emotion-detection",
-            title: "情绪检测",
-            value: RewardValue(crystals: 40)
-        ),
-        RewardSourceDefinition(
             id: "regulatory-event",
             title: "监管事件",
             value: RewardValue(crystals: 20)
@@ -152,10 +147,12 @@ enum RewardSchedule {
         "复刻池",
         "统合池",
         "定轨池",
-        "限定池"
+        "限定池",
+        "限定复刻池"
     ]
     static let dailyDispatchID = "daily-dispatch"
     static let dailyReviewID = "daily-review"
+    static let dailyEmotionDetectionID = "daily-emotion-detection"
     static let dataGapProgressID = "data-gap-current"
     static let emotionRandomSourceID = "emotion-random"
     static let dataGapManualSourceID = "data-gap-future"
@@ -171,6 +168,23 @@ enum RewardSchedule {
     ]
 
     static let dailyProgressDefinitions: [DailyProgressDefinition] = [
+        DailyProgressDefinition(
+            id: dailyEmotionDetectionID,
+            title: "情绪检测",
+            slots: [20, 40].enumerated().map { index, value in
+                DailyProgressSlotDefinition(
+                    id: "emotion-\(index + 1)",
+                    value: RewardValue(crystals: value),
+                    labels: [String(value)],
+                    historySources: ["情绪检测·\(value)异方晶"],
+                    maxCount: 1,
+                    tint: .neutral,
+                    completionBonus: .zero,
+                    shape: .circle
+                )
+            },
+            display: .value
+        ),
         DailyProgressDefinition(
             id: dailyDispatchID,
             title: "派遣",
@@ -1049,7 +1063,7 @@ enum RewardSchedule {
             return "pull-plan-pity-directional-arrest"
         case "统合池":
             return "pull-plan-pity-collective-arrest"
-        case "限定池":
+        case "限定池", "限定复刻池":
             return "pull-plan-pity-limited-arrest"
         default:
             return "pull-plan-pity-\(banner.id)"

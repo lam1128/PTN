@@ -91,11 +91,44 @@ enum PullPlanBannerCache {
 
     static func load(defaults: UserDefaults = .standard) -> [PullPlanBanner] {
         guard let data = defaults.data(forKey: key) else { return [] }
-        return (try? JSONDecoder().decode([PullPlanBanner].self, from: data)) ?? []
+        return ((try? JSONDecoder().decode([PullPlanBanner].self, from: data)) ?? [])
+            .map(normalizedBanner)
     }
 
     static func save(_ banners: [PullPlanBanner], defaults: UserDefaults = .standard) {
         guard let data = try? JSONEncoder().encode(banners) else { return }
         defaults.set(data, forKey: key)
+    }
+
+    private static func normalizedBanner(_ banner: PullPlanBanner) -> PullPlanBanner {
+        guard banner.title == "限定池",
+              banner.selectionKind == .lockCount,
+              banner.characters.count == 1,
+              let characterText = banner.characters.first,
+              characterText.contains(",") else {
+            return banner
+        }
+
+        let characters = characterText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard characters.count > 1 else { return banner }
+
+        return PullPlanBanner(
+            id: banner.id,
+            sourceID: banner.sourceID,
+            title: "限定复刻池",
+            start: banner.start,
+            end: banner.end,
+            startHour: banner.startHour,
+            startMinute: banner.startMinute,
+            endHour: banner.endHour,
+            endMinute: banner.endMinute,
+            timeZoneIdentifier: banner.timeZoneIdentifier,
+            endTimeZoneIdentifier: banner.endTimeZoneIdentifier,
+            characters: characters,
+            selectionKind: .multiLockCount
+        )
     }
 }

@@ -178,12 +178,14 @@ final class AppStateStore: ObservableObject {
             showsCycleAdvanceButton: RewardSchedule.anniversarySignInDefinition.showsCycleAdvanceButton
         )
         removeAssetNeutralRecordHistory()
+        migrateDarkZoneSeasonOpeningBonus()
         migrateDarkZoneWeeklyHistory()
         migratePullPlanRecordHistorySources()
         ensurePullPlanRecordHistory()
         ensureGeneralPoolRecordHistory()
         removeObsoleteReviewCompletionRewards()
         removeTicketlessPullPlanRecords()
+        migrateDailyEmotionDetectionProgress()
         migrateLowerHalfDataGapMergedDays()
         bootstrapInitialStateIfNeeded()
         calibrateAutomaticStorageIfNeeded()
@@ -310,6 +312,10 @@ final class AppStateStore: ObservableObject {
                     return partial + lock + 1
                 }
                 return partial
+            case .multiLockCount:
+                guard progress == .planned else { return partial }
+                let count = pullPlanCharacterLockLevels(for: banner).values.reduce(0) { $0 + $1 + 1 }
+                return partial + count
             }
         }
     }
@@ -1048,7 +1054,10 @@ final class AppStateStore: ObservableObject {
                 source: source,
                 value: entry.value,
                 claimKey: entry.claimKey,
-                amountTextOverride: entry.amountTextOverride
+                amountTextOverride: entry.amountTextOverride,
+                generalPoolRecordBeforeChange: entry.generalPoolRecordBeforeChange,
+                pullPlanRecordBeforeChange: entry.pullPlanRecordBeforeChange,
+                pullPlanPityValueBeforeChange: entry.pullPlanPityValueBeforeChange
             )
         }
         if changed {
@@ -1162,6 +1171,44 @@ final class AppStateStore: ObservableObject {
         persist()
     }
 
+    func pullPlanCharacterLockLevels(for banner: PullPlanBanner) -> [String: Int] {
+        Dictionary(
+            uniqueKeysWithValues: banner.characters.compactMap { character in
+                let key = pullPlanCharacterLockKey(bannerID: banner.id, character: character)
+                guard let lockLevel = selectedPullPlanLockChoices[key], lockLevel >= 0 else {
+                    return nil
+                }
+                return (character, lockLevel)
+            }
+        )
+    }
+
+    func setPullPlanCharacterLockChoice(
+        bannerID: String,
+        character: String,
+        lockLevel: Int?
+    ) {
+        let key = pullPlanCharacterLockKey(bannerID: bannerID, character: character)
+        if let lockLevel {
+            selectedPullPlanLockChoices[key] = lockLevel
+            pullPlanBannerProgressRawValues[bannerID] = PullPlanBannerProgress.planned.rawValue
+        } else {
+            selectedPullPlanLockChoices.removeValue(forKey: key)
+            let hasRemainingCharacterLock = selectedPullPlanLockChoices.keys.contains {
+                $0.hasPrefix("\(bannerID)::")
+            }
+            if !hasRemainingCharacterLock {
+                pullPlanBannerProgressRawValues.removeValue(forKey: bannerID)
+            }
+        }
+
+        persist()
+    }
+
+    private func pullPlanCharacterLockKey(bannerID: String, character: String) -> String {
+        "\(bannerID)::\(character)"
+    }
+
     func pullPlanPityValue(for bannerID: String) -> Int? {
         let pityKey = RewardSchedule.pullPlanPityKey(for: bannerID)
         return pullPlanPityValues[pityKey]
@@ -1169,14 +1216,92 @@ final class AppStateStore: ObservableObject {
 
     func setPullPlanPityValue(for bannerID: String, value: Int?) {
         let pityKey = RewardSchedule.pullPlanPityKey(for: bannerID)
+        let previousStoredValue = pullPlanPityValues[pityKey]
+        let previousValue = previousStoredValue ?? 0
 
         if let value {
-            pullPlanPityValues[pityKey] = max(0, value)
+            let sanitizedValue = max(0, value)
+            if sanitizedValue > previousValue {
+                let didRecordIncrease = recordPullPlanPityIncreaseIfNeeded(
+                    for: bannerID,
+                    previousValue: previousStoredValue,
+                    currentValue: sanitizedValue
+                )
+                guard didRecordIncrease else { return }
+            }
+            pullPlanPityValues[pityKey] = sanitizedValue
         } else {
             pullPlanPityValues.removeValue(forKey: pityKey)
         }
 
         persist()
+    }
+
+    @discardableResult
+    private func recordPullPlanPityIncreaseIfNeeded(
+        for bannerID: String,
+        previousValue: Int?,
+        currentValue: Int
+    ) -> Bool {
+        let resolvedPreviousValue = previousValue ?? 0
+        let drawIncrease = currentValue - resolvedPreviousValue
+        guard drawIncrease > 0 else { return true }
+
+        let previous = pullPlanTicketRecord(for: bannerID)
+        let updatedBlueTickets = previous.blueTickets + drawIncrease
+        let availableEquivalent = availablePullPlanTicketEquivalent(restoring: previous)
+        guard updatedBlueTickets <= availableEquivalent else { return false }
+
+        restorePullPlanConsumption(previous, bannerID: bannerID, removeHistory: false)
+
+        let consumedBlueTickets = min(updatedBlueTickets, totalBlueTickets)
+        let consumedCrystals = (updatedBlueTickets - consumedBlueTickets) * 180
+        totalBlueTickets -= consumedBlueTickets
+        totalCrystals -= consumedCrystals
+
+        let previousDrawCount = max(0, previous.basePullCount - resolvedPreviousValue)
+        let updated = PullPlanTicketRecord(
+            giftTickets: previous.giftTickets,
+            blueTickets: updatedBlueTickets,
+            upCount: previous.upCount,
+            upTotal: previous.upTotal,
+            nonUpCharacters: previous.nonUpCharacters,
+            basePullCount: currentValue + previousDrawCount + drawIncrease,
+            consumedBlueTickets: consumedBlueTickets,
+            consumedCrystals: consumedCrystals
+        )
+        pullPlanTicketRecords[bannerID] = updated
+
+        let consumedValue = RewardValue(
+            crystals: -consumedCrystals,
+            blueTickets: -consumedBlueTickets
+        )
+        let consumptionChanged = consumedBlueTickets != previous.consumedBlueTickets
+            || consumedCrystals != previous.consumedCrystals
+        let claimKey = pullPlanRecordClaimKey(for: bannerID)
+
+        if consumptionChanged {
+            history.removeAll { $0.claimKey == claimKey }
+            if !consumedValue.isZero {
+                history.insert(
+                    HistoryEntry(
+                        timestamp: Date(),
+                        source: pullPlanRecordSource(for: bannerID),
+                        value: consumedValue,
+                        claimKey: claimKey,
+                        amountTextOverride: pullPlanRecordAmountText(
+                            consumedBlueTickets: consumedBlueTickets,
+                            consumedCrystals: consumedCrystals
+                        ),
+                        pullPlanRecordBeforeChange: previous,
+                        pullPlanPityValueBeforeChange: previousValue
+                    ),
+                    at: 0
+                )
+            }
+        }
+
+        return true
     }
 
     func undoLatestHistoryEntry(now: Date = Date()) {
@@ -1206,10 +1331,25 @@ final class AppStateStore: ObservableObject {
 
         if let claimKey = history[index].claimKey,
            claimKey.hasPrefix("pull-plan-record-") {
+            let latest = history.remove(at: index)
             let bannerID = String(claimKey.dropFirst("pull-plan-record-".count))
-            let record = pullPlanTicketRecord(for: bannerID)
-            restorePullPlanConsumption(record, bannerID: bannerID)
-            pullPlanTicketRecords.removeValue(forKey: bannerID)
+            if let previous = latest.pullPlanRecordBeforeChange {
+                let current = pullPlanTicketRecord(for: bannerID)
+                restorePullPlanConsumption(current, bannerID: bannerID, removeHistory: false)
+                totalBlueTickets -= previous.consumedBlueTickets
+                totalCrystals -= previous.consumedCrystals
+                pullPlanTicketRecords[bannerID] = previous
+                let pityKey = RewardSchedule.pullPlanPityKey(for: bannerID)
+                if let previousPityValue = latest.pullPlanPityValueBeforeChange {
+                    pullPlanPityValues[pityKey] = previousPityValue
+                } else {
+                    pullPlanPityValues.removeValue(forKey: pityKey)
+                }
+            } else {
+                let record = pullPlanTicketRecord(for: bannerID)
+                restorePullPlanConsumption(record, bannerID: bannerID, removeHistory: false)
+                pullPlanTicketRecords.removeValue(forKey: bannerID)
+            }
             persist()
             refreshRewards(now: now)
             return
@@ -1417,6 +1557,7 @@ final class AppStateStore: ObservableObject {
                     && record.blueTickets == 0
                     && record.consumedBlueTickets == 0
                     && record.consumedCrystals == 0
+                    && record.basePullCount == 0
             }
             .map(\.key)
 
@@ -1429,6 +1570,53 @@ final class AppStateStore: ObservableObject {
             persist()
         }
         return true
+    }
+
+    private func migrateDailyEmotionDetectionProgress() {
+        let oldPrefix = "\(RewardSchedule.dailyEmotionDetectionID)-"
+        var changed = false
+        var keyMappings: [String: String] = [:]
+
+        for key in claimedRewardKeys where key.hasPrefix(oldPrefix) {
+            let dayKey = String(key.dropFirst(oldPrefix.count))
+            guard dayKey.count == 10,
+                  dayKey[dayKey.index(dayKey.startIndex, offsetBy: 4)] == "-",
+                  dayKey[dayKey.index(dayKey.startIndex, offsetBy: 7)] == "-" else {
+                continue
+            }
+            let newKey = "\(RewardSchedule.dailyEmotionDetectionID)-\(dayKey)-emotion-2-1"
+            keyMappings[key] = newKey
+        }
+
+        guard !keyMappings.isEmpty else { return }
+
+        for (oldKey, newKey) in keyMappings {
+            claimedRewardKeys.remove(oldKey)
+            claimedRewardKeys.insert(newKey)
+        }
+
+        history = history.map { entry in
+            guard let oldKey = entry.claimKey,
+                  let newKey = keyMappings[oldKey] else {
+                return entry
+            }
+            changed = true
+            return HistoryEntry(
+                id: entry.id,
+                timestamp: entry.timestamp,
+                source: "情绪检测·40异方晶",
+                value: entry.value,
+                claimKey: newKey,
+                amountTextOverride: entry.amountTextOverride,
+                generalPoolRecordBeforeChange: entry.generalPoolRecordBeforeChange,
+                pullPlanRecordBeforeChange: entry.pullPlanRecordBeforeChange,
+                pullPlanPityValueBeforeChange: entry.pullPlanPityValueBeforeChange
+            )
+        }
+
+        if changed || !keyMappings.isEmpty {
+            persist()
+        }
     }
 
     private func migrateLowerHalfDataGapMergedDays() {
@@ -1504,6 +1692,52 @@ final class AppStateStore: ObservableObject {
     }
 
     @discardableResult
+    private func migrateDarkZoneSeasonOpeningBonus(persistChanges: Bool = true) -> Bool {
+        let previousValue = RewardValue(crystals: 450)
+        let currentValue = RewardSchedule.darkZoneSeasonOpeningBonus
+        guard previousValue != currentValue else { return false }
+
+        let staleAmountText = previousValue.inlineDescription(withPlusSign: true)
+        let adjustment = RewardValue(
+            crystals: currentValue.crystals - previousValue.crystals,
+            blueTickets: currentValue.blueTickets - previousValue.blueTickets,
+            redTickets: currentValue.redTickets - previousValue.redTickets
+        )
+        var changed = false
+
+        history = history.map { entry in
+            guard let claimKey = entry.claimKey,
+                  claimKey.hasPrefix("dark-zone-season-"),
+                  entry.value == previousValue else {
+                return entry
+            }
+
+            changed = true
+            if !adjustment.isZero {
+                apply(value: adjustment)
+            }
+
+            return HistoryEntry(
+                id: entry.id,
+                timestamp: entry.timestamp,
+                source: entry.source,
+                value: currentValue,
+                claimKey: claimKey,
+                amountTextOverride: entry.amountTextOverride == staleAmountText ? nil : entry.amountTextOverride,
+                generalPoolRecordBeforeChange: entry.generalPoolRecordBeforeChange,
+                pullPlanRecordBeforeChange: entry.pullPlanRecordBeforeChange,
+                pullPlanPityValueBeforeChange: entry.pullPlanPityValueBeforeChange
+            )
+        }
+
+        guard changed else { return false }
+        if persistChanges {
+            persist()
+        }
+        return true
+    }
+
+    @discardableResult
     private func migrateDarkZoneWeeklyHistory(persistChanges: Bool = true) -> Bool {
         var changed = false
         var seenClaimKeys = Set<String>()
@@ -1542,7 +1776,9 @@ final class AppStateStore: ObservableObject {
                     value: entry.value,
                     claimKey: expectedClaimKey,
                     amountTextOverride: entry.amountTextOverride,
-                    generalPoolRecordBeforeChange: entry.generalPoolRecordBeforeChange
+                    generalPoolRecordBeforeChange: entry.generalPoolRecordBeforeChange,
+                    pullPlanRecordBeforeChange: entry.pullPlanRecordBeforeChange,
+                    pullPlanPityValueBeforeChange: entry.pullPlanPityValueBeforeChange
                 )
             )
             changed = true
@@ -1590,7 +1826,9 @@ final class AppStateStore: ObservableObject {
                 value: entry.value,
                 claimKey: entry.claimKey,
                 amountTextOverride: entry.amountTextOverride,
-                generalPoolRecordBeforeChange: entry.generalPoolRecordBeforeChange
+                generalPoolRecordBeforeChange: entry.generalPoolRecordBeforeChange,
+                pullPlanRecordBeforeChange: entry.pullPlanRecordBeforeChange,
+                pullPlanPityValueBeforeChange: entry.pullPlanPityValueBeforeChange
             )
         }
     }
