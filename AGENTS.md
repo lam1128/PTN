@@ -5,9 +5,15 @@
 - `Models/RewardModels.swift`：奖励、卡池、进度和历史记录的数据模型。
 - `RewardEngine/RewardSchedule.swift`：奖励配置、ID、日期锚点和周期规则。
 - `RewardEngine/RewardEngine.swift`：根据日期和存档状态生成页面数据，不直接写 UI。
+- `RewardEngine/PullPlanRules.swift`：抽卡结算公式和统合池库存成本等无副作用规则。
 - `Storage/AppStateStore.swift`：UserDefaults 持久化、领取/取消、库存和历史记录。
+- `Storage/AppStateStore+Decoding.swift`：本机存档解码、旧字段兼容和垫抽键迁移读取。
 - `Views/MainWidgetView.swift`：页面布局、固定顺序和交互入口。
-- `Package.swift`、`build-standalone-app.sh` 与 `script/assemble_app.sh`：独立构建和 `.app` 打包入口；构建脚本自动收集项目内 Swift 文件，不维护手动源文件清单。
+- `Views/WidgetComponents.swift`：奖励行、进度控件、卡池卡片和相关弹窗组件。
+- `Package.swift`、`build-standalone-app.sh` 与 `script/assemble_app.sh`：macOS 独立构建和 `.app` 打包入口；构建脚本自动收集项目内 Swift 文件，不维护手动源文件清单。
+
+- 当前只维护 macOS 本地应用；个人状态使用本机 `UserDefaults`，不使用 Windows、iOS、CloudKit 或 OneDrive 同步。
+- S1N 卡池和兑换码请求只更新游戏信息缓存，不上传个人库存、历史记录或抽卡规划。
 
 ## 卡池数据来源
 
@@ -66,3 +72,5 @@ git diff --check
 ```
 
 发布构建使用 `./build-release-app.sh`，生成的 `.app` 可脱离 VS Code 独立运行。编译脚本会关闭旧进程、生成 `dist/PTNHypercubeWidget.app` 并重新打开应用。重点手动检查：圆点点击与取消、密令高级奖励、垫抽数、滚动位置、倒计时、历史撤销和库存变化。
+
+抽卡规则的无副作用回归检查使用 `./script/verify_pull_plan_rules.sh`，覆盖结算公式、垫抽增加和统合池 7/10/11/12 抽边界。抽卡存档和撤销使用 `./script/verify_pull_plan_storage.sh`，只使用临时 UserDefaults suite，不读取或修改本机存档。

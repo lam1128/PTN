@@ -6,7 +6,6 @@ enum RewardCategory: String, Codable, Hashable {
     case monthly
     case eventTrial
     case darkZone
-    case dataGap
     case unknownSchedule
     case manualAdjustment
 }
@@ -16,6 +15,15 @@ enum PullPlanSelectionKind: String, Codable, Hashable {
     case targetChoice
     case lockCount
     case multiLockCount
+}
+
+enum PullPlanPoolKind: Hashable {
+    case activity
+    case collective
+    case directional
+    case rerun
+    case limited
+    case unknown
 }
 
 enum PullPlanBannerProgress: Int, Codable, Hashable {
@@ -214,6 +222,9 @@ struct PullPlanTicketRecord: Codable, Hashable {
     let upTotal: Int
     let nonUpCharacters: String
     let basePullCount: Int
+    // Both values are fixed when the record is saved; nil keeps legacy records readable.
+    let inheritedPity: Int?
+    let settledDrawCount: Int?
     let consumedBlueTickets: Int
     let consumedCrystals: Int
 
@@ -224,6 +235,8 @@ struct PullPlanTicketRecord: Codable, Hashable {
         upTotal: 0,
         nonUpCharacters: "",
         basePullCount: 0,
+        inheritedPity: nil,
+        settledDrawCount: nil,
         consumedBlueTickets: 0,
         consumedCrystals: 0
     )
@@ -239,6 +252,8 @@ struct PullPlanTicketRecord: Codable, Hashable {
         upTotal: Int = 0,
         nonUpCharacters: String = "",
         basePullCount: Int = 0,
+        inheritedPity: Int? = nil,
+        settledDrawCount: Int? = nil,
         consumedBlueTickets: Int? = nil,
         consumedCrystals: Int = 0
     ) {
@@ -248,6 +263,8 @@ struct PullPlanTicketRecord: Codable, Hashable {
         self.upTotal = upTotal
         self.nonUpCharacters = nonUpCharacters
         self.basePullCount = basePullCount
+        self.inheritedPity = inheritedPity
+        self.settledDrawCount = settledDrawCount
         self.consumedBlueTickets = consumedBlueTickets ?? blueTickets
         self.consumedCrystals = consumedCrystals
     }
@@ -259,6 +276,8 @@ struct PullPlanTicketRecord: Codable, Hashable {
         case upTotal
         case nonUpCharacters
         case basePullCount
+        case inheritedPity
+        case settledDrawCount
         case consumedBlueTickets
         case consumedCrystals
     }
@@ -272,6 +291,8 @@ struct PullPlanTicketRecord: Codable, Hashable {
             upTotal: try container.decodeIfPresent(Int.self, forKey: .upTotal) ?? 0,
             nonUpCharacters: try container.decodeIfPresent(String.self, forKey: .nonUpCharacters) ?? "",
             basePullCount: try container.decodeIfPresent(Int.self, forKey: .basePullCount) ?? 0,
+            inheritedPity: try container.decodeIfPresent(Int.self, forKey: .inheritedPity),
+            settledDrawCount: try container.decodeIfPresent(Int.self, forKey: .settledDrawCount),
             consumedBlueTickets: try container.decodeIfPresent(Int.self, forKey: .consumedBlueTickets),
             consumedCrystals: try container.decodeIfPresent(Int.self, forKey: .consumedCrystals) ?? 0
         )
@@ -289,6 +310,7 @@ struct PullPlanRecordSummary: Identifiable, Hashable {
 struct PullPlanRecordDetail: Identifiable, Hashable {
     let id: String
     let dateText: String
+    let drawCount: Int
     let upCharacter: String
     let upCount: Int
     let nonUpCharacters: String
@@ -555,6 +577,23 @@ struct PullPlanBanner: Identifiable, Codable, Hashable {
     let endTimeZoneIdentifier: String?
     let characters: [String]
     let selectionKind: PullPlanSelectionKind
+
+    var poolKind: PullPlanPoolKind {
+        switch title {
+        case RewardSchedule.activityPoolTitle:
+            return .activity
+        case "统合池":
+            return .collective
+        case "定轨池":
+            return .directional
+        case "复刻池":
+            return .rerun
+        case "限定池":
+            return .limited
+        default:
+            return .unknown
+        }
+    }
 
     init(
         id: String,

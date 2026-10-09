@@ -40,10 +40,6 @@ struct RewardEngine {
 
         rewards.append(contentsOf: makeDarkZoneRewards(for: today, claimedKeys: claimedKeys))
 
-        if let dataGapReward = makeDataGapReward(for: today, claimedKeys: claimedKeys) {
-            rewards.append(dataGapReward)
-        }
-
         return RewardSnapshot(
             currentRewards: sortCurrentRewards(rewards),
             permanentRewards: makePermanentRewards(for: currentDate, claimedKeys: claimedKeys),
@@ -147,9 +143,9 @@ struct RewardEngine {
     }
 
     private func permanentRewardPoolTitle(for anchor: PullPlanBanner) -> String {
-        guard anchor.title != "限定池" else { return "周年庆" }
+        guard anchor.poolKind != .limited else { return "周年庆" }
         let matchingBanners = RewardSchedule.pullPlanBanners.filter { banner in
-            banner.title == RewardSchedule.activityPoolTitle
+            banner.poolKind == .activity
                 && banner.startsAt(in: calendar) == anchor.startsAt(in: calendar)
         }
         return RewardSchedule.eventTrialTitle(for: matchingBanners)
@@ -161,13 +157,13 @@ struct RewardEngine {
 
     private func permanentRewardPoolBanners(for anchor: PullPlanBanner) -> [PullPlanBanner] {
         RewardSchedule.pullPlanBanners.filter { banner in
-            banner.title == RewardSchedule.activityPoolTitle
+            banner.poolKind == .activity
                 && banner.startsAt(in: calendar) == anchor.startsAt(in: calendar)
         }
     }
 
     private func isEnhancedPermanentRewardPool(_ anchor: PullPlanBanner) -> Bool {
-        anchor.title == "限定池" || permanentRewardPoolBanners(for: anchor).count >= 2
+        anchor.poolKind == .limited || permanentRewardPoolBanners(for: anchor).count >= 2
     }
 
     private func permanentRewardWindow(
@@ -593,7 +589,7 @@ struct RewardEngine {
 
     private func makeEventTrialReward(for currentDate: Date, claimedKeys: Set<String>) -> RewardItem? {
         let activeEventBanners = RewardSchedule.pullPlanBanners
-            .filter { $0.title == RewardSchedule.activityPoolTitle && $0.isActive(at: currentDate, calendar: calendar) }
+            .filter { $0.poolKind == .activity && $0.isActive(at: currentDate, calendar: calendar) }
             .sorted { lhs, rhs in
                 let lhsStart = lhs.startsAt(in: calendar)
                 let rhsStart = rhs.startsAt(in: calendar)
@@ -619,30 +615,6 @@ struct RewardEngine {
             sortOrder: 290,
             claimedKeys: claimedKeys
         )
-    }
-
-    private func makeDataGapReward(for day: DayStamp, claimedKeys: Set<String>) -> RewardItem? {
-        let currentDate = day.date(in: calendar)
-
-        for window in RewardSchedule.dataGapWindows {
-            let startDate = window.start.date(in: calendar)
-            let offset = calendar.dateComponents([.day], from: startDate, to: currentDate).day ?? Int.max
-            guard (0..<window.days).contains(offset) else { continue }
-
-            let dayIndex = offset + 1
-            let claimKey = "data-gap-\(window.id)-day-\(dayIndex)"
-            let title = "\(window.title) Day \(dayIndex)"
-            return makeRewardItem(
-                category: .dataGap,
-                title: title,
-                displayValue: window.dailyValue,
-                claimKey: claimKey,
-                sortOrder: 400,
-                claimedKeys: claimedKeys
-            )
-        }
-
-        return nil
     }
 
     private func makeManualUnknownRewards(
@@ -838,7 +810,7 @@ struct RewardEngine {
     ) -> SecretPassProgress {
         let definition = RewardSchedule.anniversarySignInDefinition
         guard let anchor = currentPermanentRewardAnchor(at: now),
-              anchor.title == "限定池" else {
+              anchor.poolKind == .limited else {
             return makeProgress(
                 id: definition.id,
                 kind: definition.kind,

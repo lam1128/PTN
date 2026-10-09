@@ -4,8 +4,7 @@ import PackageDescription
 let package = Package(
     name: "PTNHypercubeWidget",
     platforms: [
-        .macOS(.v14),
-        .iOS(.v17)
+        .macOS(.v14)
     ],
     products: [
         .executable(name: "PTNHypercubeWidget", targets: ["PTNHypercubeWidget"])
@@ -15,8 +14,7 @@ let package = Package(
             name: "PTNHypercubeWidget",
             path: "PTNHypercubeWidget",
             exclude: [
-                "App/PTNHypercubeWidgetMac.entitlements",
-                "App/PTNHypercubeWidgetiOS.entitlements"
+                "App/PTNHypercubeWidgetMac.entitlements"
             ]
         )
     ]

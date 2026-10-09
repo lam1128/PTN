@@ -101,7 +101,7 @@ enum PullPlanBannerCache {
     }
 
     private static func normalizedBanner(_ banner: PullPlanBanner) -> PullPlanBanner {
-        guard banner.title == "限定池",
+        guard banner.poolKind == .limited,
               banner.selectionKind == .lockCount,
               banner.characters.count == 1,
               let characterText = banner.characters.first,

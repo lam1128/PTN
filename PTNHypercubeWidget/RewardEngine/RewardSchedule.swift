@@ -1,13 +1,5 @@
 import Foundation
 
-struct DataGapWindow: Identifiable, Hashable {
-    let id: String
-    let title: String
-    let start: DayStamp
-    let days: Int
-    let dailyValue: RewardValue
-}
-
 struct DataGapCycle: Hashable {
     let season: Int
     let halfIndex: Int
@@ -593,9 +585,6 @@ enum RewardSchedule {
         )
     ]
 
-    // 数据间隙只录入已知窗口；未知后续档期不做自动推算。
-    static let dataGapWindows: [DataGapWindow] = []
-
     static let dataGapCycleAnchorStart = DayStamp(year: 2026, month: 8, day: 18)
     static let dataGapCycleAnchorSeason = 9
     static let dataGapCycleAnchorHalfIndex = 0
@@ -875,7 +864,7 @@ enum RewardSchedule {
     ) -> PullPlanBanner? {
         pullPlanBanners
             .filter { banner in
-                (banner.title == activityPoolTitle || banner.title == "限定池")
+                (banner.poolKind == .activity || banner.poolKind == .limited)
                     && banner.isActive(at: date, calendar: calendar)
             }
             .max { lhs, rhs in
@@ -892,7 +881,7 @@ enum RewardSchedule {
     ) -> PullPlanBanner? {
         pullPlanBanners
             .filter {
-                $0.title == activityPoolTitle
+                $0.poolKind == .activity
                     && maintenanceStartsAt(for: $0, calendar: calendar) <= date
             }
             .max { lhs, rhs in
@@ -946,7 +935,7 @@ enum RewardSchedule {
         calendar: Calendar = .rewardCalendar
     ) -> (cycleKey: String, start: Date, rerunEnd: Date, end: Date)? {
         let cycles = Dictionary(
-            grouping: pullPlanBanners.filter { $0.title == "复刻池" },
+            grouping: pullPlanBanners.filter { $0.poolKind == .rerun },
             by: { $0.start.key }
         )
         .compactMap { cycleKey, banners -> (cycleKey: String, start: Date, end: Date, sourceIDs: Set<Int>)? in
@@ -979,7 +968,7 @@ enum RewardSchedule {
         at date: Date,
         calendar: Calendar
     ) -> [PullPlanBanner] {
-        let rerunBanners = pullPlanBanners.filter { $0.title == "复刻池" }
+        let rerunBanners = pullPlanBanners.filter { $0.poolKind == .rerun }
         guard let start = rerunBanners
             .filter({ $0.isActive(at: date, calendar: calendar) })
             .map({ $0.startsAt(in: calendar) })

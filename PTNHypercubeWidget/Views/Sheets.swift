@@ -298,11 +298,19 @@ struct PullPlanRecordDetailsSheet: View {
                                     .foregroundStyle(WidgetPalette.mutedText)
 
                                 HStack(spacing: 10) {
-                                    if detail.upCount > 0 {
-                                        Text(upText(for: detail))
+                                    HStack(spacing: 10) {
+                                        if detail.upCount > 0 {
+                                            Text(upText(for: detail))
+                                        }
+                                        if detail.nonUpCount > 0 {
+                                            Text(nonUpText(for: detail))
+                                        }
                                     }
-                                    if detail.nonUpCount > 0 {
-                                        Text(nonUpText(for: detail))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                                    if detail.drawCount > 0 {
+                                        Text("抽数：\(detail.drawCount)")
+                                            .frame(minWidth: 58, alignment: .trailing)
                                     }
                                 }
                                 .font(.system(size: 12, weight: .semibold, design: .rounded))

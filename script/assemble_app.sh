@@ -19,7 +19,7 @@ case "$CONFIGURATION" in
 esac
 
 cd "$ROOT_DIR"
-swift build -c "$CONFIGURATION" -Xswiftc -DSTANDALONE_BUILD
+swift build -c "$CONFIGURATION"
 BIN_PATH="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 BUILD_BINARY="$BIN_PATH/$APP_NAME"
 
@@ -66,7 +66,7 @@ if command -v codesign >/dev/null 2>&1; then
     if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
         codesign --force --deep --sign "$CODESIGN_IDENTITY" --identifier "$BUNDLE_ID" --entitlements "$ENTITLEMENTS" "$STAGING_APP"
     else
-        # Ad-hoc local builds cannot carry CloudKit entitlements without a team.
+        # Ad-hoc local builds use the local Mac entitlement set.
         codesign --force --deep --sign - --identifier "$BUNDLE_ID" "$STAGING_APP"
     fi
     codesign --verify --deep --strict "$STAGING_APP"

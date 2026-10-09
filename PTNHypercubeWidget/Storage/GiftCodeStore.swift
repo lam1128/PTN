@@ -72,9 +72,8 @@ final class GiftCodeStore: ObservableObject {
 
     private nonisolated static func refreshSlot(at date: Date) -> String? {
         let calendar = refreshCalendar
-        let day = calendar.startOfDay(for: date)
         let isInsideRefreshWindow = RewardSchedule.pullPlanBanners.contains { banner in
-            guard banner.title == RewardSchedule.activityPoolTitle || banner.title == "限定池" else {
+            guard banner.poolKind == .activity || banner.poolKind == .limited else {
                 return false
             }
             return banner.startsAt(in: calendar) <= date && date < banner.endsAt(in: calendar)
