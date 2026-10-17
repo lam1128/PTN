@@ -383,11 +383,13 @@ struct MainWidgetView: View {
         .frame(width: 340, height: 430)
         .onAppear {
             store.refreshRewards()
+            store.autoClaimDailyRewardsIfNeeded()
             giftCodeStore.refreshIfNeeded()
             pullPlanSyncStore.refreshIfNeeded()
         }
         .onReceive(refreshTimer) { now in
             store.refreshRewards(now: now)
+            store.autoClaimDailyRewardsIfNeeded(now: now)
             giftCodeStore.refreshIfNeeded(now: now)
             pullPlanSyncStore.refreshIfNeeded(now: now)
             closeGiftCodeListIfEmpty()
@@ -894,11 +896,21 @@ struct MainWidgetView: View {
     private var visibleGiftCodes: [GiftCode] {
         let currentDate = Date()
         let anchor = RewardSchedule.currentPermanentRewardAnchor(at: currentDate)
-        return giftCodeStore.activeCodes(
+        let codes = giftCodeStore.activeCodes(
             from: anchor?.startsAt(),
             to: anchor?.endsAt(),
             limit: store.redemptionCodeProgress.displayedTotalCount
         )
+        let rewardValue = store.redemptionCodeProgress.slotValue
+        return codes.map { code in
+            GiftCode(
+                id: code.id,
+                code: code.code,
+                startsAt: code.startsAt,
+                endsAt: code.endsAt,
+                rewardValue: rewardValue
+            )
+        }
     }
 
     private var upListEntries: [UpListEntry] {

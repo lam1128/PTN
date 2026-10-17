@@ -59,6 +59,7 @@ final class AppStateStore: ObservableObject {
         static let hasPremiumSecretPass = "ptn.hasPremiumSecretPass"
         static let automaticStorageLastUpdateAt = "ptn.automaticStorageLastUpdateAt"
         static let automaticStorageCalibrationVersion = "ptn.automaticStorageCalibrationVersion"
+        static let automaticDailyClaimDayKey = "ptn.automaticDailyClaimDayKey"
     }
 
     init(
@@ -392,6 +393,59 @@ final class AppStateStore: ObservableObject {
                 )
             }
         }
+    }
+
+    func autoClaimDailyRewardsIfNeeded(now: Date = Date()) {
+        let calendar = Calendar.rewardCalendar
+        let components = calendar.dateComponents([.hour, .minute], from: now)
+        guard components.hour == 3, components.minute == 59 else { return }
+
+        let dayKey = DayStamp.rewardDay(from: now, calendar: calendar).key
+        guard defaults.string(forKey: StorageKey.automaticDailyClaimDayKey) != dayKey else {
+            return
+        }
+
+        for reward in currentRewards where reward.category == .daily || reward.category == .darkZone {
+            claim(reward, now: now)
+        }
+
+        for progress in dailyProgresses where
+            progress.id == RewardSchedule.ashTideProgressID
+            || progress.id == RewardSchedule.dataGapProgressID {
+            autoClaimUnlockedSlots(in: progress, now: now)
+        }
+
+        let weeklyIndices = RewardSchedule.automaticWeeklyInspectionSlotIndices(
+            for: now,
+            calendar: calendar
+        )
+        for index in weeklyIndices where weeklyInspectionProgress.slots.indices.contains(index) {
+            autoClaim(slot: weeklyInspectionProgress.slots[index], in: weeklyInspectionProgress, now: now)
+        }
+
+        defaults.set(dayKey, forKey: StorageKey.automaticDailyClaimDayKey)
+        persist()
+    }
+
+    private func autoClaimUnlockedSlots(in progress: DailyProgress, now: Date) {
+        for slot in progress.slots where slot.isUnlocked {
+            autoClaim(slot: slot, in: progress, now: now)
+        }
+    }
+
+    private func autoClaim(slot: DailyProgressSlot, in progress: DailyProgress, now: Date) {
+        guard !slot.isClaimed,
+              let claimKey = slot.claimKeys.first,
+              let value = slot.rewardValues.first else {
+            return
+        }
+
+        recordClaim(
+            claimKey: claimKey,
+            value: value,
+            source: slot.historySource(moduleTitle: progress.title, rewardIndex: 0),
+            now: now
+        )
     }
 
     func toggleDailyReviewStage(

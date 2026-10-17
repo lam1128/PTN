@@ -163,7 +163,11 @@ struct RewardEngine {
     }
 
     private func isEnhancedPermanentRewardPool(_ anchor: PullPlanBanner) -> Bool {
-        anchor.poolKind == .limited || permanentRewardPoolBanners(for: anchor).count >= 2
+        guard anchor.poolKind == .limited else {
+            let activityBanners = permanentRewardPoolBanners(for: anchor)
+            return RewardSchedule.eventTrialTitle(for: activityBanners) == "主线双狂"
+        }
+        return true
     }
 
     private func permanentRewardWindow(
@@ -925,7 +929,11 @@ struct RewardEngine {
             minute: RewardSchedule.redemptionCodeStartMinute
         )
         let end = anchor.endsAt(in: calendar)
-        let slotCount = isEnhancedPermanentRewardPool(anchor) ? 3 : 1
+        let isEnhanced = isEnhancedPermanentRewardPool(anchor)
+        let slotValue = isEnhanced
+            ? RewardSchedule.redemptionCodeEnhancedValue
+            : RewardSchedule.redemptionCodeRegularValue
+        let slotCount = isEnhanced ? 3 : 1
         let cycleID = "\(definition.id)-\(anchor.id)"
 
         guard activeStart <= now, now < end else {
@@ -933,7 +941,7 @@ struct RewardEngine {
                 id: cycleID,
                 kind: definition.kind,
                 title: title,
-                slotValue: definition.slotValue,
+                slotValue: slotValue,
                 slotCount: 0,
                 remainingText: nil,
                 claimedKeys: claimedKeys,
@@ -947,7 +955,7 @@ struct RewardEngine {
             id: cycleID,
             kind: definition.kind,
             title: title,
-            slotValue: definition.slotValue,
+            slotValue: slotValue,
             slotCount: slotCount,
             remainingText: remainingText(until: end, now: now, hourSuffix: "时"),
             claimedKeys: claimedKeys,

@@ -192,7 +192,7 @@ enum RewardSchedule {
             },
             display: .value,
             showsCycleAdvanceButton: true,
-            resetsDaily: false
+            resetsDaily: true
         ),
         DailyProgressDefinition(
             id: dailyReviewID,
@@ -237,7 +237,7 @@ enum RewardSchedule {
             ],
             display: .count,
             showsCycleAdvanceButton: true,
-            resetsDaily: false
+            resetsDaily: true
         ),
         DailyProgressDefinition(
             id: "daily-obedience",
@@ -300,7 +300,7 @@ enum RewardSchedule {
             ],
             display: .value,
             showsCycleAdvanceButton: true,
-            resetsDaily: false
+            resetsDaily: true
         )
     ]
 
@@ -346,6 +346,18 @@ enum RewardSchedule {
         },
         display: .value
     )
+
+    static func automaticWeeklyInspectionSlotIndices(
+        for date: Date,
+        calendar: Calendar = .rewardCalendar
+    ) -> [Int] {
+        switch calendar.component(.weekday, from: date) {
+        case 2: return [0, 1] // Monday
+        case 3: return [2, 3] // Tuesday
+        case 4: return [4] // Wednesday
+        default: return []
+        }
+    }
 
     static let activityRerunDefinition = DailyProgressDefinition(
         id: "activity-rerun",
@@ -1115,10 +1127,12 @@ enum RewardSchedule {
         kind: .redemptionCode,
         id: "redemption-code",
         title: "兑换码",
-        slotValue: RewardValue(crystals: 200),
+        slotValue: RewardValue(crystals: 60),
         slotCount: 0,
         showsCycleAdvanceButton: false
     )
+    static let redemptionCodeRegularValue = RewardValue(crystals: 60)
+    static let redemptionCodeEnhancedValue = RewardValue(crystals: 200)
     static let redemptionCodeStartHour = 8
     static let redemptionCodeStartMinute = 0
 
